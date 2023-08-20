@@ -6,30 +6,31 @@
 
 // ITDB Display
 #define _sclk 13
-#define _miso 12
+//#define _miso 12 <-- not used if no SD card
 #define _mosi 11
 #define _cs 10
 #define _dc 9
 #define _rst 8
-// LEDA goes to 3.3V
+//#define _sd 4 <-- not used if no SD card
+// LEDA goes to 5V
 // VCC goes to 5V
 // GND goes to GND
 
 // Buttons
 #define LEFT_BTN 5 // Left Button, Connect to D5 and GND
-#define RIGHT_BTN 2 // Right Button, Connect to D2 and GND
-#define ENTER_BTN 6 // Enter Button, Connect to D6 and GND
-#define HOME_BTN 3 // Home Button, Connect to D3 and GND
+#define RIGHT_BTN 3 // Right Button, Connect to D3 and GND
+#define ENTER_BTN 4 // Enter Button, Connect to D4 and GND
+#define HOME_BTN 2 // Home Button, Connect to D2 and GND
 
 // Global defines
 Adafruit_ILI9340 tft = Adafruit_ILI9340(_cs, _dc, _rst);
-int appID; // 0 main menu, 1 calculator, 2 calendar, 3 notepad
+uint8_t appID; // 0 main menu, 1 calculator, 2 calendar, 3 notepad
 
 // Main Menu Defines
-const int appsAmount = 4;
+const int appsAmount = 5;
 const int screenWidth = 240;
 const int screenHeight = 240;
-int currentChosenApp = 101; // Doesn't reset
+uint8_t currentChosenApp = 101; // Doesn't reset
 // Icons, unused
 //const int iconSize = 60;
 //const int iconSpacingX = 50;
@@ -46,8 +47,8 @@ const int spacing = 5;
 // Activates after running the equal function
 bool shouldReset;
 
-int numberMode; //The number that gets set up, it gets changed to 2 after running a function key (plus, minus, etc...)
-int highlightID; // In reading order, starting from 0
+uint8_t numberMode; //The number that gets set up, it gets changed to 2 after running a function key (plus, minus, etc...)
+int8_t highlightID; // In reading order, starting from 0
 //123+
 //456-
 //789*
@@ -55,7 +56,7 @@ int highlightID; // In reading order, starting from 0
 
 String displayedText; // Buffer variable for the displayed text
 String currentNumber; // The current number from number mode
-int functionID; // 0 - add, 1 - subtract, 2 - multiply, 3 - divide
+uint8_t functionID; // 0 - add, 1 - subtract, 2 - multiply, 3 - divide
 long number1; // number 1 memory value
 long number2; // number 2 memory value
 double result;
@@ -80,7 +81,7 @@ const char* dayNames[] = {
 
 const int numMonths = sizeof(monthNames) / sizeof(monthNames[0]);
 
-int currentMonth;
+uint8_t currentMonth;
 int currentYear;
 
 bool yearMode; //If set to true, the arrow keys will control the year, instead of the months
@@ -116,7 +117,7 @@ const int notepadGridY2 = 170;
 // Valid colors, available for change for our font color
 const uint16_t validColors[] = {ILI9340_RED, ILI9340_YELLOW, ILI9340_GREEN, 0x471A, ILI9340_WHITE}; // 0x471A is better blue
 
-int currentKey; // 0-25 letters from the qwerty array, 26 is delete, 27 is spacebar, 28 is enter
+int8_t currentKey; // 0-25 letters from the qwerty array, 26 is delete, 27 is spacebar, 28 is enter
 
 String TheTextbox = ""; // Textbox value, without the "_" symbol which gets added additionally.
 uint16_t currentColor = ILI9340_WHITE; // Text font color
@@ -127,12 +128,31 @@ uint16_t currentColor = ILI9340_WHITE; // Text font color
 
 bool running = false;
 bool paused = false;
-int stopwatchButton = 0;
+uint8_t stopwatchButton = 0;
 unsigned long stopwatchTimeStamp = 0;
 unsigned long freezeTimeStamp = 0;
 unsigned long clockElapsedSeconds = 0;
+int pausedSecs = 0;
+int updatePossibleSecs;
 
 // End Defines Stopwatch
+
+// Defines Tic Tac Toe
+
+const int CELL_SIZE = 75;
+const int GRID_OFFSET_X = 8;
+const int GRID_OFFSET_Y = 12;
+
+uint8_t currentPlayer;
+int currentCursor;
+
+uint8_t occupiedLoc[9]; //0 - Empty, 1 - X, 2 - O
+
+bool gameTie;
+bool showWinner;
+char winnerChar;
+
+// End Defines Tic Tac Toe
 
 void setup(){
   pinMode(LEFT_BTN, INPUT_PULLUP);
@@ -176,9 +196,22 @@ void defines(){
   //running = false;
   //paused = false;
   //stopwatchButton = 0;
+  
   //stopwatchTimeStamp = 0;
   //freezeTimeStamp = 0;
   //clockElapsedSeconds = 0;
+  //pausedSecs = 0;
+  updatePossibleSecs = 0;
+  
+  //Tic Tac Toe
+  currentPlayer = 0;
+  currentCursor = 4;
+  
+  for (int i = 0; i < 9; i++) occupiedLoc[i] = 0;
+  
+  gameTie = false;
+  showWinner = false;
+  winnerChar = ' ';
   
   //Start appropriate app
   if (appID == 1){
@@ -189,6 +222,8 @@ void defines(){
     setup_notepad();
   }else if (appID == 4){
     setup_stopwatch();
+  }else if (appID == 5){
+    setup_tictactoe();
   }else{
     start_main(); // No other apps? Start main menu!
   }
@@ -215,7 +250,8 @@ void drawApps(int current, int previous, bool all){
   if (current == 102 || previous == 102 || all) drawAppBox("Calendar", 1, ILI9340_WHITE, 0xFD20);
   if (current == 103 || previous == 103 || all) drawAppBox("Notepad", 2, ILI9340_WHITE, 0x780F);
   if (current == 104 || previous == 104 || all) drawAppBox("Stopwatch", 3, ILI9340_WHITE, 0xF201);
-  if (current == 105 || previous == 105 || all) drawAppBox("Coming Soon", 4, ILI9340_WHITE, 0x0420);
+  if (current == 105 || previous == 105 || all) drawAppBox("Tic Tac Toe", 4, ILI9340_WHITE, 0x537F);
+  //if (current == 105 || previous == 105 || all) drawAppBox("Coming Soon", 4, ILI9340_WHITE, 0x0420);
 }
 
 // Main menu app drawing
@@ -274,13 +310,21 @@ void setup_notepad(){
 }
 
 void setup_stopwatch(){
-  if (clockElapsedSeconds > 0) updateStopwatchDisplay(clockElapsedSeconds); // Timer in memory
-  else loadStopwatch();
-  //^ Note, if you switch the app while stopwatch is active, coming back to the app won't instantly update it.
+  if (running){
+    if (!paused) updateStopwatchDisplay((millis() / 1000) - stopwatchTimeStamp); // Timer in memory, load back and continue
+    else{
+      updateStopwatchDisplay(pausedSecs);
+    }
+  }
+  else updateStopwatchDisplay(0);
   
   displayStatusMessage();
   
   appID = 4;
+}
+
+void setup_tictactoe(){
+  drawBoard();
 }
 
 void loop(){
@@ -294,6 +338,8 @@ void loop(){
     loop_notepad();
   }else if (appID == 4){
     loop_stopwatch();
+  }else if (appID == 5){
+    loop_tictactoe();
   }else{
     loop_main(); // No other apps? Go to Main menu loop
   }
@@ -302,28 +348,28 @@ void loop(){
 void loop_general(){
   if (digitalRead(HOME_BTN) == LOW && appID > 0) {
     appID = 0;
-  defines();
+    defines();
   }
 }
 
 void loop_main() {
   if (digitalRead(RIGHT_BTN) == LOW) {
-  int prevApp = currentChosenApp;
+    int prevApp = currentChosenApp;
     currentChosenApp++;
-  if (currentChosenApp > 105) currentChosenApp = 101;
-  drawApps(currentChosenApp, prevApp, false);
+    if (currentChosenApp > 105) currentChosenApp = 101;
+    drawApps(currentChosenApp, prevApp, false);
   }
   else if (digitalRead(LEFT_BTN) == LOW) {
-  int prevApp = currentChosenApp;
+    int prevApp = currentChosenApp;
     currentChosenApp--;
-  if (currentChosenApp < 101) currentChosenApp = appsAmount + 105;
-  drawApps(currentChosenApp, prevApp, false);
+    if (currentChosenApp < 101) currentChosenApp = appsAmount + 105;
+    drawApps(currentChosenApp, prevApp, false);
   }
   else if (digitalRead(ENTER_BTN) == LOW) {
-  if (currentChosenApp < appsAmount + 101){
+    if (currentChosenApp < appsAmount + 101){
       appID = currentChosenApp - 100;
-    defines();
-  }
+      defines();
+    }
   }
 }
 
@@ -343,7 +389,7 @@ void loop_calc() {
 }
 
 void loop_calendar() {
-// Left arrow, go backwards
+  // Left arrow, go backwards
   if (digitalRead(LEFT_BTN) == LOW) {
     if (yearMode){
       if (currentYear > 1970){
@@ -367,7 +413,7 @@ void loop_calendar() {
     delay(50);
   }
 
-// Right arrow, go forwards
+  // Right arrow, go forwards
   if (digitalRead(RIGHT_BTN) == LOW) {
     if (yearMode){
       if (currentYear < 2037){
@@ -384,12 +430,12 @@ void loop_calendar() {
     }
       drawCalendar(currentYear, currentMonth);
       delay(50);
-    }
+  }
   
-//Enter button, change between year and month controller
+  //Enter button, change between year and month controller
   if (digitalRead(ENTER_BTN) == LOW) {
     yearMode = !yearMode;
-  printCalendarLabel(100); //yOffset
+    printCalendarLabel(100); //yOffset
     delay(200);
   }
 }
@@ -423,14 +469,16 @@ void loop_stopwatch() {
       running = !running;
       paused = false;
       if (running) {
-        loadStopwatch();
+        clockElapsedSeconds = 0;
+        pausedSecs = 0;
+        updateStopwatchDisplay(0); //loadStopwatch();
         stopwatchTimeStamp = currentTimeMillis / 1000;
         if (paused) {
           unsigned long pauseDuration = (currentTimeMillis - freezeTimeStamp) / 1000;
           stopwatchTimeStamp += pauseDuration; // Compensate for paused time
         }
       } else {
-        updateStopwatchDisplay(elapsedSeconds);
+        //updateStopwatchDisplay(elapsedSeconds); <-- don't do it, it breaks pause, just stop it
       }
       displayStatusMessage();
       delay(200);
@@ -440,8 +488,11 @@ void loop_stopwatch() {
         // Resume
         unsigned long pauseDuration = (currentTimeMillis - freezeTimeStamp) / 1000;
         stopwatchTimeStamp += pauseDuration; // Compensate for paused time
+        pausedSecs = 0;
       } else {
         // Pause
+        clockElapsedSeconds = elapsedSeconds;
+        pausedSecs = clockElapsedSeconds;
         freezeTimeStamp = currentTimeMillis;
       }
       paused = !paused;
@@ -451,7 +502,25 @@ void loop_stopwatch() {
   }
 
   if (running && !paused) {
-    if (millis() % 500 == 0) updateStopwatchDisplay(elapsedSeconds);
+    updatePossibleSecs++; if (updatePossibleSecs > 1000) updatePossibleSecs = 1000;
+    if (clockElapsedSeconds != elapsedSeconds && elapsedSeconds != 0 && updatePossibleSecs == 1000) updateStopwatchDisplay(elapsedSeconds);
+  }else{
+    updatePossibleSecs--; if (updatePossibleSecs < 0) updatePossibleSecs = 0;
+  }
+}
+
+void loop_tictactoe(){
+  if (digitalRead(LEFT_BTN) == LOW) {
+    GoLeft();
+    delay(150);
+  }
+  if (digitalRead(RIGHT_BTN) == LOW) {
+    GoRight();
+    delay(150);
+  }
+  else if (digitalRead(ENTER_BTN) == LOW) {
+    TicTacEnter();
+    delay(200);
   }
 }
 
@@ -639,13 +708,13 @@ void button2pressAction(){
   }
   
   if (highlightID == 12){
-  // Clear
+    // Clear
     currentNumber = "";
     clearMyDisplay();
   }
   if (highlightID == 7 && currentNumber.length() == 0){
-  // Negative numbers?
-  // put "-" in front of the number instead of running it as a function key.
+    // Negative numbers?
+    // put "-" in front of the number instead of running it as a function key.
     currentNumber = "-";
     updateDisplayedText(numberMode, currentNumber);
   }
@@ -659,7 +728,7 @@ void button2pressAction(){
     }
   }
   if (currentNumber.length() > 0 && currentNumber != "-" && numberMode == 2 && highlightID == 14){
-  // Equals, only after we get two valid numbers
+    // Equals, only after we get two valid numbers
     equalFunc();
   }
   
@@ -671,19 +740,18 @@ void button2pressAction(){
     else{
       int numberID = highlightID;
       if (highlightID == 0 || highlightID == 1 || highlightID == 2){
-        numberID++; //1, 2 and 3
+        numberID++;   // 1, 2 and 3
       }
       else if (highlightID == 4 || highlightID == 5 || highlightID == 6){
-          //4, 5 and 6
+                      // 4, 5 and 6
       }
       else if (highlightID == 8 || highlightID == 9 || highlightID == 10){
-        numberID--; //7, 8 and 9
+        numberID--;   // 7, 8 and 9
       }
-    else if (highlightID == 13){
-        numberID = 0;//0
-      }
-    else{
-    // Not a number key, break.
+      else if (highlightID == 13){
+        numberID = 0; // 0
+      }else{
+        // Not a number key, break.
         return;
       }
       currentNumber += String(numberID); // Convert to string, add to current number
@@ -715,7 +783,7 @@ void drawCalendar(int year, int monthIndex) {
     int x = 8 + xOffset + day * cellWidth;
     int y = yOffset;
   
-  if (day == 5) tft.setTextColor(ILI9340_RED); // Saturday and Sunday are RED
+    if (day == 5) tft.setTextColor(ILI9340_RED); // Saturday and Sunday are RED
     
     tft.setCursor(x, y);
     tft.print(dayNames[day]);
@@ -760,7 +828,7 @@ void printCalendarLabel(int yOffset){
   int textWidth = monthGridSpaces * 11; // Each letter in this context takes 11 units
   if (yearMode){
     textWidth = 48; // Only cover the year
-  posX += ((monthGridSpaces + 2) * 11) - 5; // Move the cursor to only cover the year
+    posX += ((monthGridSpaces + 2) * 11) - 5; // Move the cursor to only cover the year
   }
   tft.fillRect(50, yOffset - 85, 200, 30, ILI9340_BLACK);
   tft.fillRect(posX, yOffset - 85, textWidth + 10, 30, ILI9340_YELLOW); // Adjust the size and color as needed
@@ -859,34 +927,33 @@ void KeyPress2() {
     TheTextbox += keyboard[currentKey];
     drawText(TheTextbox);
   }else if (currentKey == 26){
-  // Delete, removes last char on the textbox
+    // Delete, removes last char on the textbox
     if (TheTextbox.length() > 0) {
-    // Unused code, deletes all space characters, but has performance issues
-    //if (TheTextbox.charAt(TheTextbox.length() - 1) == ' '){
-    //  while (TheTextbox.charAt(TheTextbox.length() - 1) == ' '){ // Loop repeat to remove all empty chars
-    //    TheTextbox = TheTextbox.substring(0, TheTextbox.length() - 1);
-    //    drawText(TheTextbox);
-    //  }
-    //}else{
+      // Unused code, deletes all space characters, but has performance issues
+      //if (TheTextbox.charAt(TheTextbox.length() - 1) == ' '){
+      //  while (TheTextbox.charAt(TheTextbox.length() - 1) == ' '){ // Loop repeat to remove all empty chars
+      //    TheTextbox = TheTextbox.substring(0, TheTextbox.length() - 1);
+      //    drawText(TheTextbox);
+      //  }
+      //}else{
       // Just remove one character
       TheTextbox = TheTextbox.substring(0, TheTextbox.length() - 1);
       drawText(TheTextbox);
-    ////}
-    
+      ////}
     }
   }else if (currentKey == 27 && TheTextbox.length() < notepadSize){
-  // Spacebar
+    // Spacebar
     TheTextbox += " ";
     drawText(TheTextbox);
   }else if (currentKey == 28 && TheTextbox.length() < notepadSize){
-  // Enter, adds enough space characters until it fills the row
+    // Enter, adds enough space characters until it fills the row
     int seperate = 18 - (TheTextbox.length() % 18); // Calculate how many characters can fit in the row?
     for (int i = 0; i < seperate; i++) TheTextbox += " "; // Fill the places
     drawText(TheTextbox);
   }else if (currentKey > 28){
     // Color keys, update the color of the text
-  currentColor = validColors[currentKey - 29];
-  drawText(TheTextbox);
+    currentColor = validColors[currentKey - 29];
+    drawText(TheTextbox);
   }
   
 }
@@ -915,6 +982,7 @@ void drawKeyboard(int a, int b, bool all) {
   int spacebarWidth = keyWidth * 6 + keySpacing * 5;
   int spacebarX = (tft.width() - spacebarWidth) / 2;
   int spacebarY = tft.height() - keyHeight - keySpacing;
+  
   if (a == 27 || b == 27 || all)
   drawKey(spacebarX, spacebarY, spacebarWidth, keyHeight, " ", 2, 27);
 
@@ -922,6 +990,7 @@ void drawKeyboard(int a, int b, bool all) {
   int enterWidth = keyWidth * 2 + keySpacing;
   int enterX = tft.width() - enterWidth - keySpacing;
   int enterY = spacebarY;
+  
   if (a == 28 || b == 28 || all)
   drawKey(enterX, enterY, enterWidth, keyHeight, "ENTER", 1, 28);
 
@@ -929,6 +998,7 @@ void drawKeyboard(int a, int b, bool all) {
   int backspaceWidth = keyWidth * 2 + keySpacing;
   int backspaceX = keySpacing;
   int backspaceY = spacebarY;
+  
   if (a == 26 || b == 26 || all)
   drawKey(backspaceX, backspaceY, backspaceWidth, keyHeight, "DELETE", 1, 26);
 
@@ -943,14 +1013,14 @@ void drawKeyboard(int a, int b, bool all) {
   if (a == 31 || b == 31 || all) drawColorKey(colorX + colorBTNspacing * 2, colorY, colorWidth, colorHeight, ILI9340_GREEN, "GREEN", 31);
   if (a == 32 || b == 32 || all) drawColorKey(colorX + colorBTNspacing * 3, colorY, colorWidth, colorHeight, 0x471A, " BLUE", 32); // 0x471A is better blue
   if (a == 33 || b == 33 || b == -1 || all) drawColorKey(colorX + colorBTNspacing * 4, colorY, colorWidth, colorHeight, ILI9340_WHITE, "WHITE", 33);
-  //               ^, Special case, -1, just like the calculator
+  //                              ^, Special case, -1, just like the calculator
 }
 
 void drawKey(int x, int y, int width, int height, String label, int keysize, int keyID) {
   if (keyID == currentKey){
     tft.fillRect(x, y, width, height, ILI9340_WHITE);
   }else{
-  // Highlighted key appear in white with black font, the rest appear black with white font
+    // Highlighted key appear in white with black font, the rest appear black with white font
     tft.fillRect(x, y, width, height, ILI9340_BLACK);
     tft.drawRect(x, y, width, height, ILI9340_WHITE);
   }
@@ -972,7 +1042,7 @@ void drawColorKey(int colorX, int colorY, int colorWidth, int colorHeight, uint1
   if (keyID == currentKey){
     tft.fillRect(colorX, colorY, colorWidth, colorHeight, color);
   }else{
-  // Highlighted key appear in the appropriate color with black font
+    // Highlighted key appear in the appropriate color with black font
     tft.fillRect(colorX, colorY, colorWidth, colorHeight, ILI9340_BLACK);
     tft.drawRect(colorX, colorY, colorWidth, colorHeight, color);
   }
@@ -990,13 +1060,14 @@ void drawColorKey(int colorX, int colorY, int colorWidth, int colorHeight, uint1
 
 // Start Stopwatch Code
 
-void loadStopwatch() {
-  tft.fillRect(20, 70, 200, 50, ILI9340_BLACK);
-  tft.setCursor(25, 80);
-  tft.setTextSize(4);
-  tft.setTextColor(0b1010110011011000); // Very light blue
-  tft.print("00:00:00");
-}
+// Deprecated, Use updateStopwatchDisplay(0) instead.
+//void loadStopwatch() {
+//  tft.fillRect(20, 70, 200, 50, ILI9340_BLACK);
+//  tft.setCursor(25, 80);
+//  tft.setTextSize(4);
+//  tft.setTextColor(0b1010110011011000); // Very light blue
+//  tft.print("00:00:00");
+//}
 
 void updateStopwatchDisplay(unsigned long elapsedSeconds) {
   clockElapsedSeconds = elapsedSeconds; // Remember in memory for later
@@ -1029,7 +1100,7 @@ void displayStatusMessage() {
   if (paused){
     pauseColor = 0x03E0;
     pauseLabel = "Resume";
-  pauseX = 25;
+    pauseX = 25;
   }
   
   if (running) {
@@ -1055,7 +1126,7 @@ void displayStatusMessage() {
     tft.setCursor(155, 255);
     tft.print("Stop");
       
-    } else {
+  } else {
     tft.fillRect(0, 220, 230, 90, ILI9340_BLACK);
   
     tft.fillRect(20, 220, 200, 90, ILI9340_GREEN);
@@ -1066,3 +1137,236 @@ void displayStatusMessage() {
 }
 
 // End Stopwatch Code
+
+// Start Tic Tac Toe Code
+
+void drawBoard(){
+  for (int i = 1; i < 3; i++) {
+    tft.drawFastVLine(GRID_OFFSET_X + i * CELL_SIZE, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9340_WHITE);
+    tft.drawFastHLine(GRID_OFFSET_X, GRID_OFFSET_Y + i * CELL_SIZE, CELL_SIZE * 3, ILI9340_WHITE);
+  
+    int x = GRID_OFFSET_X + i * CELL_SIZE;
+    int y = GRID_OFFSET_Y + i * CELL_SIZE;
+  
+    //Additional thickness
+    tft.drawFastVLine(x - 1, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9340_WHITE);
+    tft.drawFastVLine(x + 1, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9340_WHITE);
+  
+    tft.drawFastHLine(GRID_OFFSET_X, y - 1, CELL_SIZE * 3, ILI9340_WHITE);
+    tft.drawFastHLine(GRID_OFFSET_X, y + 1, CELL_SIZE * 3, ILI9340_WHITE);
+  
+    printTurn(currentPlayer);
+  }
+}
+
+void printTurn(int id){
+  if (showWinner){
+    tft.fillRect(GRID_OFFSET_X + 10, GRID_OFFSET_Y + 230, 200, 30, ILI9340_BLACK); // Clear player turn
+    tft.setTextColor(ILI9340_RED); // Darker than usual red
+    tft.setTextSize(2);
+    tft.setCursor(GRID_OFFSET_X + 60, GRID_OFFSET_Y + 240);
+    tft.print("Game Over!");
+  }else{
+    //Clear previous
+    tft.fillRect(GRID_OFFSET_X + 10, GRID_OFFSET_Y + 230, 200, 30, id == 0 ? 0x07FF : 0xF800); // The opposite color as text background
+  
+    //Now put the current player
+    if (id == 0){
+      tft.setTextColor(0xF800); // Red
+      tft.setTextSize(2);
+      tft.setCursor(GRID_OFFSET_X + 20, GRID_OFFSET_Y + 240);
+      tft.print("Player X's Turn");
+    }else{
+      tft.setTextColor(0x07FF); // Blue
+      tft.setTextSize(2);
+      tft.setCursor(GRID_OFFSET_X + 20, GRID_OFFSET_Y + 240);
+      tft.print("Player O's Turn");
+    }
+  }
+  
+  // Refresh the matrix
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
+      if (occupiedLoc[i * 3 + j] == 1) {
+        drawX(i, j);
+      } else if (occupiedLoc[i * 3 + j] == 2) {
+        drawO(i, j);
+      }
+    }
+  }
+  
+  if (showWinner){
+    tft.setTextSize(3);
+	if (gameTie){
+      tft.setCursor(GRID_OFFSET_X + 20, GRID_OFFSET_Y + 270);
+      tft.setTextColor(ILI9340_YELLOW);
+      tft.print("It's a tie!");
+	}
+	else{
+      tft.setCursor(GRID_OFFSET_X + 30, GRID_OFFSET_Y + 270);
+	  tft.setTextColor(ILI9340_GREEN);
+      tft.print("Winner: " + String(winnerChar));
+	}
+  }
+  drawCursor(currentCursor, -1);
+}
+
+void drawX(int row, int col) {
+  int x = GRID_OFFSET_X + col * CELL_SIZE + CELL_SIZE / 2;
+  int y = GRID_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
+  
+  tft.drawLine(x - CELL_SIZE / 3, y - CELL_SIZE / 3, x + CELL_SIZE / 3, y + CELL_SIZE / 3, 0xF800); // Red
+  tft.drawLine(x + CELL_SIZE / 3, y - CELL_SIZE / 3, x - CELL_SIZE / 3, y + CELL_SIZE / 3, 0xF800);
+  
+  //Additional thickness
+  tft.drawLine(x - CELL_SIZE / 3 - 1, y - CELL_SIZE / 3, x + CELL_SIZE / 3 - 1, y + CELL_SIZE / 3, 0xF800);
+  tft.drawLine(x + CELL_SIZE / 3 + 1, y - CELL_SIZE / 3, x - CELL_SIZE / 3 + 1, y + CELL_SIZE / 3, 0xF800);
+  
+  tft.drawLine(x - CELL_SIZE / 3, y - CELL_SIZE / 3 - 1, x + CELL_SIZE / 3, y + CELL_SIZE / 3 - 1, 0xF800);
+  tft.drawLine(x + CELL_SIZE / 3, y - CELL_SIZE / 3 + 1, x - CELL_SIZE / 3, y + CELL_SIZE / 3 + 1, 0xF800);
+}
+
+void drawO(int row, int col) {
+  int x = GRID_OFFSET_X + col * CELL_SIZE + CELL_SIZE / 2;
+  int y = GRID_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
+
+  tft.drawCircle(x, y, CELL_SIZE / 3, 0x07FF); // Blue
+  
+  //Additional thickness
+  tft.drawCircle(x, y, (CELL_SIZE / 3) - 1, 0x07FF);
+}
+
+void drawCursor(int current, int previous) {
+  //Static vars
+  int row = current / 3;
+  int col = current % 3;
+  
+  int rowB4 = previous / 3;
+  int colB4 = previous % 3;
+  
+  int cursorSize = CELL_SIZE - 10;
+  
+  //Vars that change depending on the cursor
+  int x = GRID_OFFSET_X + col * CELL_SIZE + CELL_SIZE / 2;
+  int y = GRID_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
+
+  int cursorX1 = x - cursorSize / 2;
+  int cursorY1 = y - cursorSize / 2;
+  int cursorX2 = x + cursorSize / 2;
+  int cursorY2 = y + cursorSize / 2;
+  
+  if (showWinner) tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, ILI9340_BLACK); //Game over? Draw black cursor and clear
+  else tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, currentPlayer == 0 ? 0xFB6D : 0x87FF); // The cursor is the lighter color of the current player
+  
+  if (previous == -1) return; // Used for start game and player turn, No need for clear
+  
+  //Now clear the previous cursor
+  x = GRID_OFFSET_X + colB4 * CELL_SIZE + CELL_SIZE / 2;
+  y = GRID_OFFSET_Y + rowB4 * CELL_SIZE + CELL_SIZE / 2;
+
+  cursorX1 = x - cursorSize / 2;
+  cursorY1 = y - cursorSize / 2;
+  cursorX2 = x + cursorSize / 2;
+  cursorY2 = y + cursorSize / 2;
+  
+  tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, ILI9340_BLACK);
+}
+
+void GoLeft(){
+  if (showWinner){
+    resetTicTacToe();
+    return;
+  }
+  
+  int prevCursor = currentCursor;
+  currentCursor--;
+  if (currentCursor < 0) currentCursor = 8;
+  drawCursor(currentCursor, prevCursor);
+}
+
+void GoRight(){
+  if (showWinner){
+    resetTicTacToe();
+    return;
+  }
+  
+  int prevCursor = currentCursor;
+  currentCursor++;
+  if (currentCursor > 8) currentCursor = 0;
+  drawCursor(currentCursor, prevCursor);
+}
+
+void TicTacEnter(){
+  if (showWinner){
+    resetTicTacToe();
+    return;
+  }
+  
+  if (occupiedLoc[currentCursor] == 0){
+    occupiedLoc[currentCursor] = currentPlayer + 1;
+    checkForWinner();
+    
+    // Everything good? Switch to the next player
+    currentPlayer = (currentPlayer + 1) % 2;
+    printTurn(currentPlayer);
+  }
+}
+
+void checkForWinner() {
+  // Check for diagonal win
+  if ((occupiedLoc[0] == occupiedLoc[4] && occupiedLoc[4] == occupiedLoc[8]) && occupiedLoc[0] != 0) {
+    winnerChar = (occupiedLoc[0] == 1) ? 'X' : 'O';
+    showWinner = true;
+    return;
+  }
+  
+  if ((occupiedLoc[2] == occupiedLoc[4] && occupiedLoc[4] == occupiedLoc[6]) && occupiedLoc[2] != 0) {
+    winnerChar = (occupiedLoc[2] == 1) ? 'X' : 'O';
+    showWinner = true;
+    return;
+  }
+
+  // Check for horizontal and vertical wins
+  for (int i = 0; i < 3; i++) {
+    if ((occupiedLoc[i * 3] == occupiedLoc[i * 3 + 1] && occupiedLoc[i * 3 + 1] == occupiedLoc[i * 3 + 2]) && occupiedLoc[i * 3] != 0) {
+      winnerChar = (occupiedLoc[i * 3] == 1) ? 'X' : 'O';
+      showWinner = true;
+      return; // Horizontal win
+    }
+    
+    if ((occupiedLoc[i] == occupiedLoc[i + 3] && occupiedLoc[i + 3] == occupiedLoc[i + 6]) && occupiedLoc[i] != 0) {
+      winnerChar = (occupiedLoc[i] == 1) ? 'X' : 'O';
+      showWinner = true;
+      return; // Vertical win
+    }
+  }
+  
+  // Check for tie game
+  bool isTie = true;
+  for (int i = 0; i < 9; i++) {
+    if (occupiedLoc[i] == 0) {
+      isTie = false;
+      break;
+    }
+  }
+  if (isTie) {
+    showWinner = true;
+    gameTie = true;
+  }
+  
+  //showWinner = false; // No winner
+  //return;
+}
+
+void resetTicTacToe(){
+  tft.fillScreen(ILI9340_BLACK);
+  currentPlayer = 0;
+  currentCursor = 4;
+  for (int i = 0; i < 9; i++) occupiedLoc[i] = 0;
+  gameTie = false;
+  showWinner = false;
+  winnerChar = ' ';
+  drawBoard();
+}
+
+// End Tic Tac Toe Code
