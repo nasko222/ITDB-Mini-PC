@@ -96,6 +96,18 @@ const char* qwerty[] = {
   "ZXCVBNM"
 };
 
+const char* qwerty2[] = {
+  "qwertyuiop",
+  "asdfghjkl",
+  "zxcvbnm"
+};
+
+const char* symbol[] = {
+  "1234567890",
+  "+-*/=.,?!",
+  "()#$%:\""
+};
+
 // number of keyboard rows
 const int numRows = sizeof(qwerty) / sizeof(qwerty[0]);
 
@@ -118,6 +130,7 @@ const int notepadGridY2 = 170;
 const uint16_t validColors[] = {ILI9340_RED, ILI9340_YELLOW, ILI9340_GREEN, 0x471A, ILI9340_WHITE}; // 0x471A is better blue
 
 int8_t currentKey; // 0-25 letters from the qwerty array, 26 is delete, 27 is spacebar, 28 is enter
+int8_t keyboardMode; //0 - caps, 1 - small, 2 - numbers and symbols
 
 String TheTextbox = ""; // Textbox value, without the "_" symbol which gets added additionally.
 uint16_t currentColor = ILI9340_WHITE; // Text font color
@@ -132,7 +145,8 @@ uint8_t stopwatchButton = 0;
 unsigned long stopwatchTimeStamp = 0;
 unsigned long freezeTimeStamp = 0;
 unsigned long clockElapsedSeconds = 0;
-int pausedSecs = 0;
+
+unsigned long pausedSecs = 0;
 int updatePossibleSecs;
 
 // End Defines Stopwatch
@@ -144,7 +158,7 @@ const int GRID_OFFSET_X = 8;
 const int GRID_OFFSET_Y = 12;
 
 uint8_t currentPlayer;
-int currentCursor;
+int8_t currentCursor;
 
 uint8_t occupiedLoc[9]; //0 - Empty, 1 - X, 2 - O
 
@@ -181,13 +195,14 @@ void defines(){
   result = 0;
 
   //Calendar
-  currentMonth = 8 - 1; // August (Month 8), don't touch the -1
+  currentMonth = 0; // 0 - January, 1 - February, 2 - March, etc
   currentYear = 2023;
   
   yearMode = false;
 
   //Notepad
   currentKey = 27; // Spacebar
+  keyboardMode = 0; //CAPS
 
   //TheTextbox = "";
   //currentColor = ILI9340_WHITE;
@@ -245,7 +260,7 @@ void start_main(){
   drawApps(99, 99, true);
 }
 
-void drawApps(int current, int previous, bool all){
+void drawApps(uint8_t current, uint8_t previous, bool all){
   if (current == 101 || previous == 101 || all) drawAppBox("Calculator", 0, ILI9340_WHITE, 0x95D4);
   if (current == 102 || previous == 102 || all) drawAppBox("Calendar", 1, ILI9340_WHITE, 0xFD20);
   if (current == 103 || previous == 103 || all) drawAppBox("Notepad", 2, ILI9340_WHITE, 0x780F);
@@ -255,7 +270,7 @@ void drawApps(int current, int previous, bool all){
 }
 
 // Main menu app drawing
-void drawAppBox(const char* appName, int position, uint16_t appBoxColor, uint16_t textColor) {
+void drawAppBox(const char* appName, uint8_t position, uint16_t appBoxColor, uint16_t textColor) {
   int internalAppID = position + 101;
   position += 1; // Do not interfere with the header
   
@@ -545,7 +560,7 @@ void clearMyDisplay(){
   number2 = 0;
 }
 
-void updateDisplayedText(int mode, const String &text) {
+void updateDisplayedText(uint8_t mode, const String &text) {
   displayedText = text; // Buffer
   
   int num = mode;
@@ -640,7 +655,7 @@ void drawCalculatorInterface() {
   updateCalculatorButton(-2, -2, true);
 }
 
-void updateCalculatorButton(int current, int previous, bool all){
+void updateCalculatorButton(int8_t current, int8_t previous, bool all){
   // If it doesn't update all, It updates only the current and the previous selected buttons
   if (current == 0 || previous == 0 || previous == 16 || all) drawButton("1", 10+spacing, 120, highlightID == 0);
   if (current == 1 || previous == 1 || all) drawButton("2", 10+spacing + buttonWidth + spacing, 120, highlightID == 1);
@@ -764,7 +779,7 @@ void button2pressAction(){
 
 // Start Calendar Code
 
-void drawCalendar(int year, int monthIndex) {
+void drawCalendar(int year, uint8_t monthIndex) {
   
   tft.fillScreen(ILI9340_BLACK);
   tft.setTextColor(ILI9340_WHITE);
@@ -818,7 +833,7 @@ void drawCalendar(int year, int monthIndex) {
   }
 }
 
-void printCalendarLabel(int yOffset){
+void printCalendarLabel(uint8_t yOffset){
   tft.setTextSize(2);
   tft.setTextColor(ILI9340_YELLOW);
   tft.setCursor(60, yOffset - 80);
@@ -842,7 +857,7 @@ void printCalendarLabel(int yOffset){
   tft.print(currentYear);
 }
 
-int dayOfWeek(int year, int month, int day) {
+int dayOfWeek(int year, uint8_t month, uint8_t day) {
   
 // Calculates where each day of each year belongs in the weeks respectively
 
@@ -905,6 +920,14 @@ void drawText(String text){
   }
 }
 
+void ChangeKeyboard(){
+  if (keyboardMode == 0) keyboardMode = 1;
+  else if (keyboardMode == 1) keyboardMode = 2;
+  else if (keyboardMode == 2) keyboardMode = 0;
+  
+  drawKeyboard(-3, -3, true);
+}
+
 void KeyPress0(){
   currentKey--;
   if (currentKey < 0){
@@ -923,7 +946,10 @@ void KeyPress1(){
 
 void KeyPress2() {
   if (currentKey < 26 && TheTextbox.length() < notepadSize){
-    String keyboard = "QWERTYUIOPASDFGHJKLZXCVBNM";
+    String keyboard = "";
+    if (keyboardMode == 0) keyboard =        "QWERTYUIOPASDFGHJKLZXCVBNM";
+    else if (keyboardMode == 1) keyboard =   "qwertyuiopasdfghjklzxcvbnm";
+    else if (keyboardMode == 2) keyboard =   "1234567890+-*/=.,?!()#$%:\"";
     TheTextbox += keyboard[currentKey];
     drawText(TheTextbox);
   }else if (currentKey == 26){
@@ -946,19 +972,21 @@ void KeyPress2() {
     TheTextbox += " ";
     drawText(TheTextbox);
   }else if (currentKey == 28 && TheTextbox.length() < notepadSize){
-    // Enter, adds enough space characters until it fills the row
-    int seperate = 18 - (TheTextbox.length() % 18); // Calculate how many characters can fit in the row?
-    for (int i = 0; i < seperate; i++) TheTextbox += " "; // Fill the places
-    drawText(TheTextbox);
+    //// Enter, adds enough space characters until it fills the row
+    //int seperate = 18 - (TheTextbox.length() % 18); // Calculate how many characters can fit in the row?
+    //for (int i = 0; i < seperate; i++) TheTextbox += " "; // Fill the places
+    //drawText(TheTextbox);
+  
+    //NEW! Change keyboard mode
+    ChangeKeyboard();
   }else if (currentKey > 28){
     // Color keys, update the color of the text
     currentColor = validColors[currentKey - 29];
     drawText(TheTextbox);
   }
-  
 }
 
-void drawKeyboard(int a, int b, bool all) {
+void drawKeyboard(int8_t a, int8_t b, bool all) {
   // If it doesn't update all, It updates only the current and the previous selected buttons
   int yOffset = tft.height() - ((numRows + 1) * (keyHeight + keySpacing));
   
@@ -973,10 +1001,15 @@ void drawKeyboard(int a, int b, bool all) {
       int x = rowXOffset + col * (keyWidth + keySpacing);
       int y = yOffset + row * (keyHeight + keySpacing);
       nextKey++;
-      if (nextKey == a || nextKey == b || all || (b == 34 && nextKey == 0)) // Special case out of bounds, just like the calculator
-      drawKey(x, y, keyWidth, keyHeight, String(qwerty[row][col]), 2, nextKey);
+      if (nextKey == a || nextKey == b || all || (b == 34 && nextKey == 0)){ // Special case out of bounds, just like the calculator
+        if (keyboardMode == 0) drawKey(x, y, keyWidth, keyHeight, String(qwerty[row][col]), 2, nextKey);
+        else if (keyboardMode == 1) drawKey(x, y, keyWidth, keyHeight, String(qwerty2[row][col]), 2, nextKey);
+        else if (keyboardMode == 2) drawKey(x, y, keyWidth, keyHeight, String(symbol[row][col]), 2, nextKey);
+      }
     }
   }
+  
+  if (a == -3 || b == -3) return; // Update only the typing keys
 
   // Draw spacebar
   int spacebarWidth = keyWidth * 6 + keySpacing * 5;
@@ -987,12 +1020,14 @@ void drawKeyboard(int a, int b, bool all) {
   drawKey(spacebarX, spacebarY, spacebarWidth, keyHeight, " ", 2, 27);
 
   // Draw enter key
+  // Update, its no longer enter, I changed it to mode
   int enterWidth = keyWidth * 2 + keySpacing;
   int enterX = tft.width() - enterWidth - keySpacing;
   int enterY = spacebarY;
   
   if (a == 28 || b == 28 || all)
-  drawKey(enterX, enterY, enterWidth, keyHeight, "ENTER", 1, 28);
+  //drawKey(enterX, enterY, enterWidth, keyHeight, "ENTER", 1, 28);
+  drawKey(enterX, enterY, enterWidth, keyHeight, " MODE", 1, 28);
 
   // Draw backspace key
   int backspaceWidth = keyWidth * 2 + keySpacing;
@@ -1016,7 +1051,7 @@ void drawKeyboard(int a, int b, bool all) {
   //                              ^, Special case, -1, just like the calculator
 }
 
-void drawKey(int x, int y, int width, int height, String label, int keysize, int keyID) {
+void drawKey(int x, int y, uint8_t width, uint8_t height, String label, uint8_t keysize, uint8_t keyID) {
   if (keyID == currentKey){
     tft.fillRect(x, y, width, height, ILI9340_WHITE);
   }else{
@@ -1038,7 +1073,7 @@ void drawKey(int x, int y, int width, int height, String label, int keysize, int
   tft.print(label);
 }
 
-void drawColorKey(int colorX, int colorY, int colorWidth, int colorHeight, uint16_t color, String label, int keyID){
+void drawColorKey(int colorX, int colorY, uint8_t colorWidth, uint8_t colorHeight, uint16_t color, String label, uint8_t keyID){
   if (keyID == currentKey){
     tft.fillRect(colorX, colorY, colorWidth, colorHeight, color);
   }else{
@@ -1159,7 +1194,7 @@ void drawBoard(){
   }
 }
 
-void printTurn(int id){
+void printTurn(int8_t id){
   if (showWinner){
     tft.fillRect(GRID_OFFSET_X + 10, GRID_OFFSET_Y + 230, 200, 30, ILI9340_BLACK); // Clear player turn
     tft.setTextColor(ILI9340_RED); // Darker than usual red
@@ -1197,21 +1232,21 @@ void printTurn(int id){
   
   if (showWinner){
     tft.setTextSize(3);
-	if (gameTie){
+  if (gameTie){
       tft.setCursor(GRID_OFFSET_X + 20, GRID_OFFSET_Y + 270);
       tft.setTextColor(ILI9340_YELLOW);
       tft.print("It's a tie!");
-	}
-	else{
+  }
+  else{
       tft.setCursor(GRID_OFFSET_X + 30, GRID_OFFSET_Y + 270);
-	  tft.setTextColor(ILI9340_GREEN);
+    tft.setTextColor(ILI9340_GREEN);
       tft.print("Winner: " + String(winnerChar));
-	}
+  }
   }
   drawCursor(currentCursor, -1);
 }
 
-void drawX(int row, int col) {
+void drawX(int8_t row, int8_t col) {
   int x = GRID_OFFSET_X + col * CELL_SIZE + CELL_SIZE / 2;
   int y = GRID_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
   
@@ -1226,7 +1261,7 @@ void drawX(int row, int col) {
   tft.drawLine(x + CELL_SIZE / 3, y - CELL_SIZE / 3 + 1, x - CELL_SIZE / 3, y + CELL_SIZE / 3 + 1, 0xF800);
 }
 
-void drawO(int row, int col) {
+void drawO(int8_t row, int8_t col) {
   int x = GRID_OFFSET_X + col * CELL_SIZE + CELL_SIZE / 2;
   int y = GRID_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
 
@@ -1236,7 +1271,7 @@ void drawO(int row, int col) {
   tft.drawCircle(x, y, (CELL_SIZE / 3) - 1, 0x07FF);
 }
 
-void drawCursor(int current, int previous) {
+void drawCursor(int8_t current, int8_t previous) {
   //Static vars
   int row = current / 3;
   int col = current % 3;
