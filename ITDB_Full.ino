@@ -1,6 +1,6 @@
 #include <SPI.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_ILI9340.h>
+#include <Adafruit_ILI9341.h>
 
 // Digital pins define
 
@@ -23,7 +23,7 @@
 #define HOME_BTN 2 // Home Button, Connect to D2 and GND
 
 // Global defines
-Adafruit_ILI9340 tft = Adafruit_ILI9340(_cs, _dc, _rst);
+Adafruit_ILI9341 tft = Adafruit_ILI9341(_cs, _dc, _rst);
 uint8_t appID; // 0 main menu, 1 calculator, 2 calendar, 3 notepad
 
 // Main Menu Defines
@@ -127,13 +127,13 @@ const int notepadGridX2 = 230;
 const int notepadGridY2 = 170;
 
 // Valid colors, available for change for our font color
-const uint16_t validColors[] = {ILI9340_RED, ILI9340_YELLOW, ILI9340_GREEN, 0x471A, ILI9340_WHITE}; // 0x471A is better blue
+const uint16_t validColors[] = {ILI9341_RED, ILI9341_YELLOW, ILI9341_GREEN, 0x471A, ILI9341_WHITE}; // 0x471A is better blue
 
 int8_t currentKey; // 0-25 letters from the qwerty array, 26 is delete, 27 is spacebar, 28 is enter
 int8_t keyboardMode; //0 - caps, 1 - small, 2 - numbers and symbols
 
 String TheTextbox = ""; // Textbox value, without the "_" symbol which gets added additionally.
-uint16_t currentColor = ILI9340_WHITE; // Text font color
+uint16_t currentColor = ILI9341_WHITE; // Text font color
 
 // End Defines Notepad
 
@@ -181,7 +181,7 @@ void setup(){
 
 void defines(){
   //Reset screen
-  tft.fillScreen(ILI9340_BLACK);
+  tft.fillScreen(ILI9341_BLACK);
   
   //Calculator
   shouldReset = false;
@@ -205,7 +205,7 @@ void defines(){
   keyboardMode = 0; //CAPS
 
   //TheTextbox = "";
-  //currentColor = ILI9340_WHITE;
+  //currentColor = ILI9341_WHITE;
   
   //Stopwatch
   //running = false;
@@ -248,12 +248,12 @@ void start_main(){
   // Draw PC label
   tft.setTextSize(3);
   tft.setCursor((screenWidth - 150) / 2, 20);
-  tft.setTextColor(ILI9340_RED); tft.print("B");
+  tft.setTextColor(ILI9341_RED); tft.print("B");
   tft.setTextColor(0xFD20); tft.print("A"); //Orange
-  tft.setTextColor(ILI9340_YELLOW); tft.print("S");
-  tft.setTextColor(ILI9340_GREEN); tft.print("T");
+  tft.setTextColor(ILI9341_YELLOW); tft.print("S");
+  tft.setTextColor(ILI9341_GREEN); tft.print("T");
   tft.setTextColor(0x95D4); tft.print("U"); //Light Blue
-  tft.setTextColor(ILI9340_BLUE); tft.print("N ");
+  tft.setTextColor(ILI9341_BLUE); tft.print("N ");
   tft.setTextColor(0x780F); tft.print("P"); //Purple
   tft.setTextColor(0xFC9F); tft.print("C"); //Pink
   
@@ -261,12 +261,12 @@ void start_main(){
 }
 
 void drawApps(uint8_t current, uint8_t previous, bool all){
-  if (current == 101 || previous == 101 || all) drawAppBox("Calculator", 0, ILI9340_WHITE, 0x95D4);
-  if (current == 102 || previous == 102 || all) drawAppBox("Calendar", 1, ILI9340_WHITE, 0xFD20);
-  if (current == 103 || previous == 103 || all) drawAppBox("Notepad", 2, ILI9340_WHITE, 0x780F);
-  if (current == 104 || previous == 104 || all) drawAppBox("Stopwatch", 3, ILI9340_WHITE, 0xF201);
-  if (current == 105 || previous == 105 || all) drawAppBox("Tic Tac Toe", 4, ILI9340_WHITE, 0x537F);
-  //if (current == 105 || previous == 105 || all) drawAppBox("Coming Soon", 4, ILI9340_WHITE, 0x0420);
+  if (current == 101 || previous == 101 || all) drawAppBox("Calculator", 0, ILI9341_WHITE, 0x95D4);
+  if (current == 102 || previous == 102 || all) drawAppBox("Calendar", 1, ILI9341_WHITE, 0xFD20);
+  if (current == 103 || previous == 103 || all) drawAppBox("Notepad", 2, ILI9341_WHITE, 0x780F);
+  if (current == 104 || previous == 104 || all) drawAppBox("Stopwatch", 3, ILI9341_WHITE, 0xF201);
+  if (current == 105 || previous == 105 || all) drawAppBox("Tic Tac Toe", 4, ILI9341_WHITE, 0x537F);
+  //if (current == 106 || previous == 106 || all) drawAppBox("Coming Soon", 4, ILI9341_WHITE, 0x0420);
 }
 
 // Main menu app drawing
@@ -283,7 +283,7 @@ void drawAppBox(const char* appName, uint8_t position, uint16_t appBoxColor, uin
   int y2 = 50;
   
   //Revert previous state
-  tft.fillRect(x, y, x2, y2, ILI9340_BLACK);
+  tft.fillRect(x, y, x2, y2, ILI9341_BLACK);
   
   if (internalAppID == currentChosenApp) tft.fillRect(x, y, x2, y2, textColor);
   else tft.drawRect(x, y, x2, y2, appBoxColor);
@@ -295,7 +295,7 @@ void drawAppBox(const char* appName, uint8_t position, uint16_t appBoxColor, uin
   int textX = x + 10;
   int textY = y + y2 / 2 - 5;
   
-  if (internalAppID == currentChosenApp) tft.setTextColor(ILI9340_BLACK);
+  if (internalAppID == currentChosenApp) tft.setTextColor(ILI9341_BLACK);
   else tft.setTextColor(textColor);
   tft.setTextSize(textSize);
   tft.setCursor(textX, textY);
@@ -304,14 +304,14 @@ void drawAppBox(const char* appName, uint8_t position, uint16_t appBoxColor, uin
 }
 
 void setup_calc(){
-  tft.fillScreen(ILI9340_BLACK);
+  tft.fillScreen(ILI9341_BLACK);
   drawCalculatorInterface();
   
   appID = 1;
 }
 
 void setup_calendar(){
-  tft.fillScreen(ILI9340_BLACK);
+  tft.fillScreen(ILI9341_BLACK);
   drawCalendar(currentYear, currentMonth);
   
   appID = 2;
@@ -549,7 +549,7 @@ void resetCalc(){
 
 void clearMyDisplay(){
   // Clears the upper part of the display where numbers and functions appear
-  tft.fillRect(0, 0, tft.width(), 100, ILI9340_BLACK);
+  tft.fillRect(0, 0, tft.width(), 100, ILI9341_BLACK);
   
   // Reset few stuff
   numberMode = 1;
@@ -565,7 +565,7 @@ void updateDisplayedText(uint8_t mode, const String &text) {
   
   int num = mode;
   tft.setCursor(20, 10 + (num - 1) * 30); // Depends on the number mode, it puts it in a particular row
-  tft.setTextColor(ILI9340_WHITE);
+  tft.setTextColor(ILI9341_WHITE);
   tft.setTextSize(3);
   tft.print(displayedText);
 }
@@ -593,7 +593,7 @@ void addFunction() {
   displayedText = text; // Buffer
   
   tft.setCursor(200, 25);
-  tft.setTextColor(ILI9340_WHITE);
+  tft.setTextColor(ILI9341_WHITE);
   tft.setTextSize(4);
   tft.print(displayedText);
 }
@@ -640,7 +640,7 @@ void equalFunc() {
   // End of trim code
 
   tft.setCursor(20, 10);
-  tft.setTextColor(ILI9340_WHITE);
+  tft.setTextColor(ILI9341_WHITE);
   tft.setTextSize(3);
   tft.print("= "); // Equals to:
   tft.print(resultString);
@@ -651,7 +651,7 @@ void equalFunc() {
 
 void drawCalculatorInterface() {
   tft.setTextSize(2);
-  tft.setTextColor(ILI9340_WHITE);
+  tft.setTextColor(ILI9341_WHITE);
   updateCalculatorButton(-2, -2, true);
 }
 
@@ -682,11 +682,11 @@ void updateCalculatorButton(int8_t current, int8_t previous, bool all){
 void drawButton(const char *label, int x, int y, bool highlight) {
   if (highlight){
     tft.fillRect(x, y, buttonWidth, buttonHeight, 0b1010110011011000); // Very light blue
-    tft.setTextColor(ILI9340_BLACK);
+    tft.setTextColor(ILI9341_BLACK);
   }
   else{
-    tft.fillRect(x, y, buttonWidth, buttonHeight, ILI9340_BLUE);
-    tft.setTextColor(ILI9340_WHITE);
+    tft.fillRect(x, y, buttonWidth, buttonHeight, ILI9341_BLUE);
+    tft.setTextColor(ILI9341_WHITE);
   }
   tft.setCursor(x + buttonWidth / 4, y + buttonHeight / 4 + 5);
   tft.setTextSize(2);
@@ -781,8 +781,8 @@ void button2pressAction(){
 
 void drawCalendar(int year, uint8_t monthIndex) {
   
-  tft.fillScreen(ILI9340_BLACK);
-  tft.setTextColor(ILI9340_WHITE);
+  tft.fillScreen(ILI9341_BLACK);
+  tft.setTextColor(ILI9341_WHITE);
   tft.setTextSize(2);
 
   int xOffset = 20;
@@ -798,7 +798,7 @@ void drawCalendar(int year, uint8_t monthIndex) {
     int x = 8 + xOffset + day * cellWidth;
     int y = yOffset;
   
-    if (day == 5) tft.setTextColor(ILI9340_RED); // Saturday and Sunday are RED
+    if (day == 5) tft.setTextColor(ILI9341_RED); // Saturday and Sunday are RED
     
     tft.setCursor(x, y);
     tft.print(dayNames[day]);
@@ -820,14 +820,14 @@ void drawCalendar(int year, uint8_t monthIndex) {
     int y = yOffset + ((day - 1 + startingDay) / 7) * cellHeight;
   
     // Draw a square around the day's number
-    tft.drawRect(x, y, cellWidth, cellHeight, ILI9340_WHITE);
+    tft.drawRect(x, y, cellWidth, cellHeight, ILI9341_WHITE);
   
     // Calculate the center of the square for the text positioning
     int textX = x + cellWidth / 2 - (day >= 10 ? 10 : 5);
     int textY = y + cellHeight / 2 - 8;
   
     tft.setCursor(textX, textY);
-    tft.setTextColor(ILI9340_WHITE);
+    tft.setTextColor(ILI9341_WHITE);
     if (((day - 1 + startingDay) % 7) >= 5) tft.setTextColor(0xFACA); // Saturday and Sunday are RED
     tft.print(day);
   }
@@ -835,7 +835,7 @@ void drawCalendar(int year, uint8_t monthIndex) {
 
 void printCalendarLabel(uint8_t yOffset){
   tft.setTextSize(2);
-  tft.setTextColor(ILI9340_YELLOW);
+  tft.setTextColor(ILI9341_YELLOW);
   tft.setCursor(60, yOffset - 80);
   
   int posX = 55; // The same as the month label
@@ -845,15 +845,15 @@ void printCalendarLabel(uint8_t yOffset){
     textWidth = 48; // Only cover the year
     posX += ((monthGridSpaces + 2) * 11) - 5; // Move the cursor to only cover the year
   }
-  tft.fillRect(50, yOffset - 85, 200, 30, ILI9340_BLACK);
-  tft.fillRect(posX, yOffset - 85, textWidth + 10, 30, ILI9340_YELLOW); // Adjust the size and color as needed
+  tft.fillRect(50, yOffset - 85, 200, 30, ILI9341_BLACK);
+  tft.fillRect(posX, yOffset - 85, textWidth + 10, 30, ILI9341_YELLOW); // Adjust the size and color as needed
   
   //Show month and year on top
-  if (!yearMode) tft.setTextColor(ILI9340_BLACK);
+  if (!yearMode) tft.setTextColor(ILI9341_BLACK);
   tft.print(monthNames[currentMonth]);
   tft.print(" ");
-  if (yearMode) tft.setTextColor(ILI9340_BLACK);
-  else tft.setTextColor(ILI9340_YELLOW);
+  if (yearMode) tft.setTextColor(ILI9341_BLACK);
+  else tft.setTextColor(ILI9341_YELLOW);
   tft.print(currentYear);
 }
 
@@ -879,15 +879,15 @@ void clearTextBox(){
   tft.drawRect(notepadGridX1 + 1, notepadGridX1 + 1, notepadGridX2 - 2, notepadGridY2 - 2, 0b1010110011011000); // Very light blue
   tft.drawRect(notepadGridY1 - 1, notepadGridY1 - 1, notepadGridX2 - 3, notepadGridY2 - 3, 0b1010110011011000); // Very light blue
   tft.drawRect(notepadGridY1 - 1, notepadGridY1 - 1, notepadGridX2 - 4, notepadGridY2 - 4, 0b1010110011011000); // Very light blue
-  tft.fillRect(notepadGridY1, notepadGridY1, notepadGridX2 - 5, notepadGridY2 - 5, ILI9340_BLACK);
+  tft.fillRect(notepadGridY1, notepadGridY1, notepadGridX2 - 5, notepadGridY2 - 5, ILI9341_BLACK);
 
   // Additional keyboard squares
   int displayHeight = tft.height();  // Height of the display
   int keyboardHeight = numRows * (keyHeight + keySpacing) + 25;  // Height of the keyboard
   int margin = (displayHeight - keyboardHeight);
   
-  tft.drawRect(0, margin, tft.width(), keyboardHeight, ILI9340_WHITE);
-  tft.drawRect(1, margin + 1, tft.width() - 2, keyboardHeight - 2, ILI9340_WHITE);
+  tft.drawRect(0, margin, tft.width(), keyboardHeight, ILI9341_WHITE);
+  tft.drawRect(1, margin + 1, tft.width() - 2, keyboardHeight - 2, ILI9341_WHITE);
   
   //TheTextbox = "";
   drawText(TheTextbox);
@@ -907,7 +907,7 @@ void drawText(String text){
 
   for (int i = 0; i < text.length() + 1; ++i) {
     if (y < maxYGridRender){ // Check this, so it doesn't go off screen and delete part of yellow border
-      tft.fillRect(x, y, 12, 20, ILI9340_BLACK);
+      tft.fillRect(x, y, 12, 20, ILI9341_BLACK);
     }
     tft.setCursor(x, y);
     tft.print(text.charAt(i));
@@ -1043,21 +1043,21 @@ void drawKeyboard(int8_t a, int8_t b, bool all) {
   int colorWidth = keySpacing + 40;
   int colorHeight = keyHeight;
   int colorBTNspacing = 48;
-  if (a == 29 || b == 29 || all) drawColorKey(colorX + colorBTNspacing * 0, colorY, colorWidth, colorHeight, ILI9340_RED, " RED ", 29);
-  if (a == 30 || b == 30 || all) drawColorKey(colorX + colorBTNspacing * 1, colorY, colorWidth, colorHeight, ILI9340_YELLOW, "YELLOW", 30);
-  if (a == 31 || b == 31 || all) drawColorKey(colorX + colorBTNspacing * 2, colorY, colorWidth, colorHeight, ILI9340_GREEN, "GREEN", 31);
+  if (a == 29 || b == 29 || all) drawColorKey(colorX + colorBTNspacing * 0, colorY, colorWidth, colorHeight, ILI9341_RED, " RED ", 29);
+  if (a == 30 || b == 30 || all) drawColorKey(colorX + colorBTNspacing * 1, colorY, colorWidth, colorHeight, ILI9341_YELLOW, "YELLOW", 30);
+  if (a == 31 || b == 31 || all) drawColorKey(colorX + colorBTNspacing * 2, colorY, colorWidth, colorHeight, ILI9341_GREEN, "GREEN", 31);
   if (a == 32 || b == 32 || all) drawColorKey(colorX + colorBTNspacing * 3, colorY, colorWidth, colorHeight, 0x471A, " BLUE", 32); // 0x471A is better blue
-  if (a == 33 || b == 33 || b == -1 || all) drawColorKey(colorX + colorBTNspacing * 4, colorY, colorWidth, colorHeight, ILI9340_WHITE, "WHITE", 33);
+  if (a == 33 || b == 33 || b == -1 || all) drawColorKey(colorX + colorBTNspacing * 4, colorY, colorWidth, colorHeight, ILI9341_WHITE, "WHITE", 33);
   //                              ^, Special case, -1, just like the calculator
 }
 
 void drawKey(int x, int y, uint8_t width, uint8_t height, String label, uint8_t keysize, uint8_t keyID) {
   if (keyID == currentKey){
-    tft.fillRect(x, y, width, height, ILI9340_WHITE);
+    tft.fillRect(x, y, width, height, ILI9341_WHITE);
   }else{
     // Highlighted key appear in white with black font, the rest appear black with white font
-    tft.fillRect(x, y, width, height, ILI9340_BLACK);
-    tft.drawRect(x, y, width, height, ILI9340_WHITE);
+    tft.fillRect(x, y, width, height, ILI9341_BLACK);
+    tft.drawRect(x, y, width, height, ILI9341_WHITE);
   }
   if (keysize == 1){ // Alternative calculation for the bigger keys
     tft.setCursor(x + width / 8, y + 5 + height / 6);
@@ -1065,9 +1065,9 @@ void drawKey(int x, int y, uint8_t width, uint8_t height, String label, uint8_t 
     tft.setCursor(x + width / 4, y + height / 4);
   }
   if (keyID == currentKey){
-    tft.setTextColor(ILI9340_BLACK);
+    tft.setTextColor(ILI9341_BLACK);
   }else{
-    tft.setTextColor(ILI9340_WHITE);
+    tft.setTextColor(ILI9341_WHITE);
   }
   tft.setTextSize(keysize);
   tft.print(label);
@@ -1078,12 +1078,12 @@ void drawColorKey(int colorX, int colorY, uint8_t colorWidth, uint8_t colorHeigh
     tft.fillRect(colorX, colorY, colorWidth, colorHeight, color);
   }else{
     // Highlighted key appear in the appropriate color with black font
-    tft.fillRect(colorX, colorY, colorWidth, colorHeight, ILI9340_BLACK);
+    tft.fillRect(colorX, colorY, colorWidth, colorHeight, ILI9341_BLACK);
     tft.drawRect(colorX, colorY, colorWidth, colorHeight, color);
   }
   tft.setCursor(colorX + colorWidth / 8, colorY + 5 + colorHeight / 6);
   if (keyID == currentKey){
-    tft.setTextColor(ILI9340_BLACK);
+    tft.setTextColor(ILI9341_BLACK);
   }else{
     tft.setTextColor(0xC618); // Light Gray
   }
@@ -1097,7 +1097,7 @@ void drawColorKey(int colorX, int colorY, uint8_t colorWidth, uint8_t colorHeigh
 
 // Deprecated, Use updateStopwatchDisplay(0) instead.
 //void loadStopwatch() {
-//  tft.fillRect(20, 70, 200, 50, ILI9340_BLACK);
+//  tft.fillRect(20, 70, 200, 50, ILI9341_BLACK);
 //  tft.setCursor(25, 80);
 //  tft.setTextSize(4);
 //  tft.setTextColor(0b1010110011011000); // Very light blue
@@ -1111,7 +1111,7 @@ void updateStopwatchDisplay(unsigned long elapsedSeconds) {
   unsigned long minutes = (elapsedSeconds / 60) % 60;
   unsigned long hours = elapsedSeconds / 3600;
 
-  tft.fillRect(20, 70, 200, 50, ILI9340_BLACK);
+  tft.fillRect(20, 70, 200, 50, ILI9341_BLACK);
 
   tft.setCursor(25, 80);
   tft.setTextSize(4);
@@ -1139,33 +1139,33 @@ void displayStatusMessage() {
   }
   
   if (running) {
-    tft.fillRect(10, 220, 220, 90, ILI9340_BLACK);
+    tft.fillRect(10, 220, 220, 90, ILI9341_BLACK);
   
     if (stopwatchButton == 0){
       tft.drawRect(10, 220, 100, 90, pauseColor);
       tft.setTextColor(pauseColor);
     }else{
       tft.fillRect(10, 220, 100, 90, pauseColor);
-      tft.setTextColor(ILI9340_BLACK);
+      tft.setTextColor(ILI9341_BLACK);
     }
     tft.setCursor(pauseX, 255);
     tft.print(pauseLabel);
     
     if (stopwatchButton == 0){
-      tft.fillRect(130, 220, 100, 90, ILI9340_RED);
-      tft.setTextColor(ILI9340_BLACK);
+      tft.fillRect(130, 220, 100, 90, ILI9341_RED);
+      tft.setTextColor(ILI9341_BLACK);
     }else{
-      tft.drawRect(130, 220, 100, 90, ILI9340_RED);
-      tft.setTextColor(ILI9340_RED);
+      tft.drawRect(130, 220, 100, 90, ILI9341_RED);
+      tft.setTextColor(ILI9341_RED);
     }
     tft.setCursor(155, 255);
     tft.print("Stop");
       
   } else {
-    tft.fillRect(0, 220, 230, 90, ILI9340_BLACK);
+    tft.fillRect(0, 220, 230, 90, ILI9341_BLACK);
   
-    tft.fillRect(20, 220, 200, 90, ILI9340_GREEN);
-    tft.setTextColor(ILI9340_BLACK);
+    tft.fillRect(20, 220, 200, 90, ILI9341_GREEN);
+    tft.setTextColor(ILI9341_BLACK);
     tft.setCursor(90, 255);
     tft.print("Start");
   }
@@ -1177,18 +1177,18 @@ void displayStatusMessage() {
 
 void drawBoard(){
   for (int i = 1; i < 3; i++) {
-    tft.drawFastVLine(GRID_OFFSET_X + i * CELL_SIZE, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9340_WHITE);
-    tft.drawFastHLine(GRID_OFFSET_X, GRID_OFFSET_Y + i * CELL_SIZE, CELL_SIZE * 3, ILI9340_WHITE);
+    tft.drawFastVLine(GRID_OFFSET_X + i * CELL_SIZE, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9341_WHITE);
+    tft.drawFastHLine(GRID_OFFSET_X, GRID_OFFSET_Y + i * CELL_SIZE, CELL_SIZE * 3, ILI9341_WHITE);
   
     int x = GRID_OFFSET_X + i * CELL_SIZE;
     int y = GRID_OFFSET_Y + i * CELL_SIZE;
   
     //Additional thickness
-    tft.drawFastVLine(x - 1, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9340_WHITE);
-    tft.drawFastVLine(x + 1, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9340_WHITE);
+    tft.drawFastVLine(x - 1, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9341_WHITE);
+    tft.drawFastVLine(x + 1, GRID_OFFSET_Y, CELL_SIZE * 3, ILI9341_WHITE);
   
-    tft.drawFastHLine(GRID_OFFSET_X, y - 1, CELL_SIZE * 3, ILI9340_WHITE);
-    tft.drawFastHLine(GRID_OFFSET_X, y + 1, CELL_SIZE * 3, ILI9340_WHITE);
+    tft.drawFastHLine(GRID_OFFSET_X, y - 1, CELL_SIZE * 3, ILI9341_WHITE);
+    tft.drawFastHLine(GRID_OFFSET_X, y + 1, CELL_SIZE * 3, ILI9341_WHITE);
   
     printTurn(currentPlayer);
   }
@@ -1196,8 +1196,8 @@ void drawBoard(){
 
 void printTurn(int8_t id){
   if (showWinner){
-    tft.fillRect(GRID_OFFSET_X + 10, GRID_OFFSET_Y + 230, 200, 30, ILI9340_BLACK); // Clear player turn
-    tft.setTextColor(ILI9340_RED); // Darker than usual red
+    tft.fillRect(GRID_OFFSET_X + 10, GRID_OFFSET_Y + 230, 200, 30, ILI9341_BLACK); // Clear player turn
+    tft.setTextColor(ILI9341_RED); // Darker than usual red
     tft.setTextSize(2);
     tft.setCursor(GRID_OFFSET_X + 60, GRID_OFFSET_Y + 240);
     tft.print("Game Over!");
@@ -1234,12 +1234,12 @@ void printTurn(int8_t id){
     tft.setTextSize(3);
   if (gameTie){
       tft.setCursor(GRID_OFFSET_X + 20, GRID_OFFSET_Y + 270);
-      tft.setTextColor(ILI9340_YELLOW);
+      tft.setTextColor(ILI9341_YELLOW);
       tft.print("It's a tie!");
   }
   else{
       tft.setCursor(GRID_OFFSET_X + 30, GRID_OFFSET_Y + 270);
-    tft.setTextColor(ILI9340_GREEN);
+    tft.setTextColor(ILI9341_GREEN);
       tft.print("Winner: " + String(winnerChar));
   }
   }
@@ -1290,7 +1290,7 @@ void drawCursor(int8_t current, int8_t previous) {
   int cursorX2 = x + cursorSize / 2;
   int cursorY2 = y + cursorSize / 2;
   
-  if (showWinner) tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, ILI9340_BLACK); //Game over? Draw black cursor and clear
+  if (showWinner) tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, ILI9341_BLACK); //Game over? Draw black cursor and clear
   else tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, currentPlayer == 0 ? 0xFB6D : 0x87FF); // The cursor is the lighter color of the current player
   
   if (previous == -1) return; // Used for start game and player turn, No need for clear
@@ -1304,7 +1304,7 @@ void drawCursor(int8_t current, int8_t previous) {
   cursorX2 = x + cursorSize / 2;
   cursorY2 = y + cursorSize / 2;
   
-  tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, ILI9340_BLACK);
+  tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, ILI9341_BLACK);
 }
 
 void GoLeft(){
@@ -1394,7 +1394,7 @@ void checkForWinner() {
 }
 
 void resetTicTacToe(){
-  tft.fillScreen(ILI9340_BLACK);
+  tft.fillScreen(ILI9341_BLACK);
   currentPlayer = 0;
   currentCursor = 4;
   for (int i = 0; i < 9; i++) occupiedLoc[i] = 0;
