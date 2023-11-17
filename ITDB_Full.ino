@@ -16,11 +16,18 @@
 // VCC goes to 5V
 // GND goes to GND
 
-// Buttons
-#define LEFT_BTN 5 // Left Button, Connect to D5 and GND
-#define RIGHT_BTN 3 // Right Button, Connect to D3 and GND
-#define ENTER_BTN 4 // Enter Button, Connect to D4 and GND
-#define HOME_BTN 2 // Home Button, Connect to D2 and GND
+// Buttons (LEGACY)
+//#define LEFT_BTN 5 // Left Button, Connect to D5 and GND
+//#define RIGHT_BTN 3 // Right Button, Connect to D3 and GND
+//#define ENTER_BTN 4 // Enter Button, Connect to D4 and GND
+//#define HOME_BTN 2 // Home Button, Connect to D2 and GND
+
+// Joystick defines
+#define JoyAxis0 A0 // Y Axis
+#define JoyAxis1 A1 // X Axis
+#define JoyBut0 4 // Button
+const int minResistance = 100;
+const int maxResistance = 950;
 
 // Global defines
 Adafruit_ILI9341 tft = Adafruit_ILI9341(_cs, _dc, _rst);
@@ -169,10 +176,16 @@ char winnerChar;
 // End Defines Tic Tac Toe
 
 void setup(){
-  pinMode(LEFT_BTN, INPUT_PULLUP);
-  pinMode(RIGHT_BTN, INPUT_PULLUP);
-  pinMode(ENTER_BTN, INPUT_PULLUP);
-  pinMode(HOME_BTN, INPUT_PULLUP);
+  // Buttons (LEGACY)
+  //pinMode(LEFT_BTN, INPUT_PULLUP);
+  //pinMode(RIGHT_BTN, INPUT_PULLUP);
+  //pinMode(ENTER_BTN, INPUT_PULLUP);
+  //pinMode(HOME_BTN, INPUT_PULLUP);
+  
+  // JoyAxis0 and 1 are defined by default as analog in
+  //pinMode(JoyAxis0, INPUT);
+  //pinMode(JoyAxis1, INPUT);
+  pinMode(JoyBut0, INPUT_PULLUP);
 
   tft.begin();
   appID = 0; // Get main menu
@@ -343,7 +356,7 @@ void setup_tictactoe(){
 }
 
 void loop(){
-  loop_general(); // Background loop, Always loops, in any app
+  //loop_general(); // Background loop, Always loops, in any app
   
   if (appID == 1){
     loop_calc();
@@ -360,27 +373,29 @@ void loop(){
   }
 }
 
-void loop_general(){
-  if (digitalRead(HOME_BTN) == LOW && appID > 0) {
-    appID = 0;
-    defines();
-  }
-}
+//void loop_general(){
+//  if (digitalRead(HOME_BTN) == LOW && appID > 0) {
+//    appID = 0;
+//    defines();
+//  }
+//}
 
 void loop_main() {
-  if (digitalRead(RIGHT_BTN) == LOW) {
+  if (analogRead(JoyAxis1) > maxResistance) {
     int prevApp = currentChosenApp;
     currentChosenApp++;
     if (currentChosenApp > 105) currentChosenApp = 101;
     drawApps(currentChosenApp, prevApp, false);
+  delay(200);
   }
-  else if (digitalRead(LEFT_BTN) == LOW) {
+  else if (analogRead(JoyAxis1) < minResistance) {
     int prevApp = currentChosenApp;
     currentChosenApp--;
     if (currentChosenApp < 101) currentChosenApp = appsAmount + 105;
     drawApps(currentChosenApp, prevApp, false);
+  delay(200);
   }
-  else if (digitalRead(ENTER_BTN) == LOW) {
+  else if (digitalRead(JoyBut0) == LOW) {
     if (currentChosenApp < appsAmount + 101){
       appID = currentChosenApp - 100;
       defines();
@@ -389,15 +404,15 @@ void loop_main() {
 }
 
 void loop_calc() {
-  if (digitalRead(LEFT_BTN) == LOW) {
+  if (analogRead(JoyAxis1) < minResistance) {
     button0pressAction();
     delay(200);
   }
-  else if (digitalRead(RIGHT_BTN) == LOW) {
+  else if (analogRead(JoyAxis1) > maxResistance) {
     button1pressAction();
     delay(200);
   }
-  else if (digitalRead(ENTER_BTN) == LOW) {
+  else if (digitalRead(JoyBut0) == LOW) {
     button2pressAction();
     delay(200);
   }
@@ -405,7 +420,7 @@ void loop_calc() {
 
 void loop_calendar() {
   // Left arrow, go backwards
-  if (digitalRead(LEFT_BTN) == LOW) {
+  if (analogRead(JoyAxis1) < minResistance) {
     if (yearMode){
       if (currentYear > 1970){
         currentYear--;
@@ -429,7 +444,7 @@ void loop_calendar() {
   }
 
   // Right arrow, go forwards
-  if (digitalRead(RIGHT_BTN) == LOW) {
+  if (analogRead(JoyAxis1) > maxResistance) {
     if (yearMode){
       if (currentYear < 2037){
         currentYear++;
@@ -448,7 +463,7 @@ void loop_calendar() {
   }
   
   //Enter button, change between year and month controller
-  if (digitalRead(ENTER_BTN) == LOW) {
+  if (digitalRead(JoyBut0) == LOW) {
     yearMode = !yearMode;
     printCalendarLabel(100); //yOffset
     delay(200);
@@ -456,15 +471,15 @@ void loop_calendar() {
 }
 
 void loop_notepad() {
-  if (digitalRead(LEFT_BTN) == LOW) {
+  if (analogRead(JoyAxis1) < minResistance) {
     KeyPress0();
-    delay(150);
+    delay(200);
   }
-  if (digitalRead(RIGHT_BTN) == LOW) {
+  if (analogRead(JoyAxis1) > maxResistance) {
     KeyPress1();
-    delay(150);
+    delay(200);
   }
-  else if (digitalRead(ENTER_BTN) == LOW) {
+  else if (digitalRead(JoyBut0) == LOW) {
     KeyPress2();
     delay(200);
   }
@@ -474,11 +489,11 @@ void loop_stopwatch() {
   unsigned long currentTimeMillis = millis();
   unsigned long elapsedSeconds = (currentTimeMillis / 1000) - stopwatchTimeStamp;
 
-  if ((digitalRead(LEFT_BTN) == LOW || digitalRead(RIGHT_BTN) == LOW) && running) {
+  if ((analogRead(JoyAxis1) < minResistance || analogRead(JoyAxis1) > maxResistance) && running) {
     stopwatchButton = (stopwatchButton + 1) % 2; // Both buttons switch to the opposite function (Pause/Resume, Start/Stop)
     displayStatusMessage();
     delay(100);
-  } else if (digitalRead(ENTER_BTN) == LOW) {
+  } else if (digitalRead(JoyBut0) == LOW) {
     if (!running || stopwatchButton == 0) {
       // Start or Stop
       running = !running;
@@ -525,15 +540,15 @@ void loop_stopwatch() {
 }
 
 void loop_tictactoe(){
-  if (digitalRead(LEFT_BTN) == LOW) {
+  if (analogRead(JoyAxis1) < minResistance) {
     GoLeft();
-    delay(150);
+    delay(200);
   }
-  if (digitalRead(RIGHT_BTN) == LOW) {
+  if (analogRead(JoyAxis1) > maxResistance) {
     GoRight();
-    delay(150);
+    delay(200);
   }
-  else if (digitalRead(ENTER_BTN) == LOW) {
+  else if (digitalRead(JoyBut0) == LOW) {
     TicTacEnter();
     delay(200);
   }
