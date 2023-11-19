@@ -1,6 +1,8 @@
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
+#include <ThreeWire.h>  
+#include <RtcDS1302.h>
 
 // Digital pins define
 
@@ -20,29 +22,47 @@
 //#define LEFT_BTN 5 // Left Button, Connect to D5 and GND
 //#define RIGHT_BTN 3 // Right Button, Connect to D3 and GND
 //#define ENTER_BTN 4 // Enter Button, Connect to D4 and GND
-//#define HOME_BTN 2 // Home Button, Connect to D2 and GND
+#define HOME_BTN 2 // Home Button, Connect to D2 and GND
 
 // Joystick defines
-#define JoyAxis0 A0 // Y Axis
-#define JoyAxis1 A1 // X Axis
+#define JoyAxis0 A0 // X Axis
+#define JoyAxis1 A1 // Y Axis
 #define JoyBut0 4 // Button
-const int minResistance = 100;
-const int maxResistance = 950;
+const int minResistance0 = 100;
+const int minResistance1 = 100;
+const int maxResistance0 = 950;
+const int maxResistance1 = 950;
+
+//uint8_t horizontalDir = 1; //0 - left, 1 - idle, 2 - right
+//uint8_t verticalDir = 1; //0 - up, 1 - idle, 2 - down
+
+bool goButton(){ return digitalRead(JoyBut0) == LOW;}
+bool goLeft(){ return analogRead(JoyAxis0) > maxResistance0;}
+bool goRight(){ return analogRead(JoyAxis0) < minResistance0;}
+bool goUp(){ return analogRead(JoyAxis1) < minResistance1;}
+bool goDown(){ return analogRead(JoyAxis1) > maxResistance1;}
+/*
+bool goTopLeft(){ return goLeft() || goUp();}
+bool goTopRight(){ return goRight() || goUp();}
+bool goBottomLeft(){ return goLeft() || goDown();}
+bool goBottomRight(){ return goRight() || goDown();}
+*/
 
 // Global defines
 Adafruit_ILI9341 tft = Adafruit_ILI9341(_cs, _dc, _rst);
-uint8_t appID; // 0 main menu, 1 calculator, 2 calendar, 3 notepad
+uint8_t appID; // 0 main menu, 1 calculator, 2 calendar, 3 notepad, 4 stopwatch, 5 tictactoe, 6 paint
 
 // Main Menu Defines
-const int appsAmount = 5;
+const int appsAmount = 6;
 const int screenWidth = 240;
-const int screenHeight = 240;
 uint8_t currentChosenApp = 101; // Doesn't reset
 // Icons, unused
 //const int iconSize = 60;
 //const int iconSpacingX = 50;
 //const int iconSpacingY = 20;
 //const int iconsPerRow = 2;
+
+String mainMenuTime;
 
 // Defines Calculator
 
@@ -88,8 +108,11 @@ const char* dayNames[] = {
 
 const int numMonths = sizeof(monthNames) / sizeof(monthNames[0]);
 
-uint8_t currentMonth;
-int currentYear;
+uint8_t currentDay;
+uint8_t calendarMonth;
+uint8_t currentMonth; //RTC controlled
+int calendarYear;
+int currentYear; //RTC controlled
 
 bool yearMode; //If set to true, the arrow keys will control the year, instead of the months
 
@@ -175,26 +198,54 @@ char winnerChar;
 
 // End Defines Tic Tac Toe
 
+// Start Defines Paint
+
+bool showGrid = true;
+uint16_t brushColor = 0xFFFF; // Initial color is white
+// Slider values
+uint8_t rSlider = 127;
+uint8_t gSlider = 127;
+uint8_t bSlider = 127;
+
+// End Defines Paint
+
+// RTC Clock
+
+ThreeWire myWire(6,7,5); // IO, SCLK, CE
+RtcDS1302<ThreeWire> Rtc(myWire);
+bool RTCFailure;
+
+// End RTC
+
 void setup(){
   // Buttons (LEGACY)
   //pinMode(LEFT_BTN, INPUT_PULLUP);
   //pinMode(RIGHT_BTN, INPUT_PULLUP);
   //pinMode(ENTER_BTN, INPUT_PULLUP);
-  //pinMode(HOME_BTN, INPUT_PULLUP);
+  pinMode(HOME_BTN, INPUT_PULLUP);
   
   // JoyAxis0 and 1 are defined by default as analog in
   //pinMode(JoyAxis0, INPUT);
   //pinMode(JoyAxis1, INPUT);
   pinMode(JoyBut0, INPUT_PULLUP);
 
+  Rtc.Begin();
   tft.begin();
   appID = 0; // Get main menu
   defines();
 }
 
+void RTCKeepAliveCheck(){
+  RtcDateTime now = Rtc.GetDateTime();
+  if (!now.IsValid()) RTCFailure = true;
+}
+
 void defines(){
   //Reset screen
   tft.fillScreen(ILI9341_BLACK);
+  
+  //Reset RTC Clock
+  mainMenuTime = "";
   
   //Calculator
   shouldReset = false;
@@ -208,8 +259,9 @@ void defines(){
   result = 0;
 
   //Calendar
-  currentMonth = 0; // 0 - January, 1 - February, 2 - March, etc
-  currentYear = 2023;
+  //currentDay = 1; - All assigned by RTC
+  //calendarMonth = 0; // 0 - January, 1 - February, 2 - March, etc
+  //calendarYear = 2023; //Failsafe for RTC crash
   
   yearMode = false;
 
@@ -241,6 +293,9 @@ void defines(){
   showWinner = false;
   winnerChar = ' ';
   
+  //RTC Keep Alive
+  RTCKeepAliveCheck();
+  
   //Start appropriate app
   if (appID == 1){
     setup_calc();
@@ -252,6 +307,8 @@ void defines(){
     setup_stopwatch();
   }else if (appID == 5){
     setup_tictactoe();
+  }else if (appID == 6){
+    setup_paint();
   }else{
     start_main(); // No other apps? Start main menu!
   }
@@ -260,42 +317,109 @@ void defines(){
 void start_main(){
   // Draw PC label
   tft.setTextSize(3);
-  tft.setCursor((screenWidth - 150) / 2, 20);
-  tft.setTextColor(ILI9341_RED); tft.print("B");
-  tft.setTextColor(0xFD20); tft.print("A"); //Orange
-  tft.setTextColor(ILI9341_YELLOW); tft.print("S");
-  tft.setTextColor(ILI9341_GREEN); tft.print("T");
-  tft.setTextColor(0x95D4); tft.print("U"); //Light Blue
-  tft.setTextColor(ILI9341_BLUE); tft.print("N ");
+  tft.setCursor((screenWidth - 160) / 2, 20);
+  tft.setTextColor(ILI9341_RED); tft.print("A");
+  tft.setTextColor(0xFD20); tft.print("r"); //Orange
+  tft.setTextColor(ILI9341_YELLOW); tft.print("d");
+  tft.setTextColor(0x0420); tft.print("u"); // Lime
+  tft.setTextColor(ILI9341_GREEN); tft.print("i");
+  tft.setTextColor(0x95D4); tft.print("n"); //Light Blue
+  tft.setTextColor(ILI9341_BLUE); tft.print("o");
   tft.setTextColor(0x780F); tft.print("P"); //Purple
   tft.setTextColor(0xFC9F); tft.print("C"); //Pink
+  
+  updateMainClock();
   
   drawApps(99, 99, true);
 }
 
+void updateMainClock(){
+  //Draw a rectangle to clear overlap issues
+  tft.fillRect((screenWidth - 100) / 2 - 5, 45, 120, 25, ILI9341_BLACK);
+  //Draw clock below ArduinoPC Logo
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+  tft.setCursor((screenWidth - 100) / 2, 50);
+  
+  mainMenuTime = getTime(); tft.print(mainMenuTime);
+}
+
+String getTime() {
+  RTCKeepAliveCheck();
+  
+  if (RTCFailure){
+	  return "RTC Error";
+  }
+  RtcDateTime now = Rtc.GetDateTime();
+
+  int hours = now.Hour();
+  int minutes = now.Minute();
+  //int seconds = now.Second();
+  
+  //calibrate
+  minutes++;
+  //end calibrate
+
+  // Convert to 12-hour format
+  bool isPM = false;
+  if (hours >= 12) {
+    isPM = true;
+    if (hours > 12) {
+      hours -= 12;
+    }
+  }
+
+  // Ensure 12:01 AM instead of 00:01 AM
+  if (hours == 0) {
+    hours = 12;
+  }
+  
+  //Fix for situations like 11:60 PM
+  if (minutes >= 60){
+	  hours++;
+	  minutes = 0;
+	  if (hours == 0) isPM = false; //Ensure 12:00 AM doesn't appear as PM and vice versa
+  }
+
+  // Format the time string
+  String timeString = String(hours) + ":" + (minutes < 10 ? "0" : "") + String(minutes);
+
+  // Add AM/PM
+  if (isPM) {
+    timeString += " PM";
+  } else {
+    timeString += " AM";
+  }
+
+  return timeString;
+}
+
+
 void drawApps(uint8_t current, uint8_t previous, bool all){
-  if (current == 101 || previous == 101 || all) drawAppBox("Calculator", 0, ILI9341_WHITE, 0x95D4);
-  if (current == 102 || previous == 102 || all) drawAppBox("Calendar", 1, ILI9341_WHITE, 0xFD20);
-  if (current == 103 || previous == 103 || all) drawAppBox("Notepad", 2, ILI9341_WHITE, 0x780F);
-  if (current == 104 || previous == 104 || all) drawAppBox("Stopwatch", 3, ILI9341_WHITE, 0xF201);
-  if (current == 105 || previous == 105 || all) drawAppBox("Tic Tac Toe", 4, ILI9341_WHITE, 0x537F);
-  //if (current == 106 || previous == 106 || all) drawAppBox("Coming Soon", 4, ILI9341_WHITE, 0x0420);
+  if (current == 101 || previous == 101 || all) drawAppBox("Calculator", 0, ILI9341_WHITE, 0x95D4, 2);
+  if (current == 102 || previous == 102 || all) drawAppBox("Calendar", 1, ILI9341_WHITE, 0xFD20, 2);
+  if (current == 103 || previous == 103 || all) drawAppBox("Notepad", 2, ILI9341_WHITE, 0x780F, 2);
+  if (current == 104 || previous == 104 || all) drawAppBox("Stopwatch", 3, ILI9341_WHITE, 0xF201, 2);
+  if (current == 105 || previous == 105 || all) drawAppBox("TicTacToe", 4, ILI9341_WHITE, 0x537F, 2);
+  if (current == 106 || previous == 106 || all) drawAppBox("Paint", 5, ILI9341_WHITE, 0x0420, 2);
 }
 
 // Main menu app drawing
-void drawAppBox(const char* appName, uint8_t position, uint16_t appBoxColor, uint16_t textColor) {
+void drawAppBox(const char* appName, uint8_t position, uint16_t appBoxColor, uint16_t textColor, uint8_t textSize) {
   int internalAppID = position + 101;
-  position += 1; // Do not interfere with the header
+  //position += 1; // Do not interfere with the header <-- never mind its fine now
   
-  int yOffset = 10;
+  int yOffset = 75;
   
-  //Outline
-  int x = 0;
-  int y = position * 50 + yOffset;
-  int x2 = screenWidth;
-  int y2 = 50;
+  // Calculate new y coordinates for two boxes per row
+  int y = (position / 2) * 80 + yOffset; // Adjusted to start from the top-left
+  int y2 = 80; // Full height of the app box
   
-  //Revert previous state
+  // Calculate x coordinates for two boxes per row
+  int x = (position % 2) * screenWidth / 2;
+  int x2 = screenWidth / 2;
+  
+  // Revert previous state
   tft.fillRect(x, y, x2, y2, ILI9341_BLACK);
   
   if (internalAppID == currentChosenApp) tft.fillRect(x, y, x2, y2, textColor);
@@ -303,9 +427,9 @@ void drawAppBox(const char* appName, uint8_t position, uint16_t appBoxColor, uin
   
   // App text label
   int textLength = strlen(appName);
-  int textSize = 2;
+  //int textSize = 2;
   int textWidth = textSize * 6 * textLength;
-  int textX = x + 10;
+  int textX = x + (x2 - textWidth) / 2;
   int textY = y + y2 / 2 - 5;
   
   if (internalAppID == currentChosenApp) tft.setTextColor(ILI9341_BLACK);
@@ -316,25 +440,29 @@ void drawAppBox(const char* appName, uint8_t position, uint16_t appBoxColor, uin
   tft.print(appName);
 }
 
+
 void setup_calc(){
   tft.fillScreen(ILI9341_BLACK);
   drawCalculatorInterface();
   
-  appID = 1;
+  //appID = 1;
 }
 
-void setup_calendar(){
+void setup_calendar() {
   tft.fillScreen(ILI9341_BLACK);
+
+  getRTCCalendarData();
+
   drawCalendar(currentYear, currentMonth);
-  
-  appID = 2;
+
+  //appID = 2;
 }
 
 void setup_notepad(){
   clearTextBox();
   drawKeyboard(-2, -2, true);
   
-  appID = 3;
+  //appID = 3;
 }
 
 void setup_stopwatch(){
@@ -348,15 +476,20 @@ void setup_stopwatch(){
   
   displayStatusMessage();
   
-  appID = 4;
+  //appID = 4;
 }
 
 void setup_tictactoe(){
   drawBoard();
 }
 
+void setup_paint(){
+  // Start the paint app
+  startPaintApp();
+}
+
 void loop(){
-  //loop_general(); // Background loop, Always loops, in any app
+  loop_general(); // Background loop, Always loops, in any app
   
   if (appID == 1){
     loop_calc();
@@ -368,34 +501,54 @@ void loop(){
     loop_stopwatch();
   }else if (appID == 5){
     loop_tictactoe();
+  }else if (appID == 6){
+    loop_paint();
   }else{
     loop_main(); // No other apps? Go to Main menu loop
   }
 }
 
-//void loop_general(){
-//  if (digitalRead(HOME_BTN) == LOW && appID > 0) {
-//    appID = 0;
-//    defines();
-//  }
-//}
+void loop_general(){  
+  if (digitalRead(HOME_BTN) == LOW && appID > 0) {
+    appID = 0;
+    defines();
+  }
+}
 
 void loop_main() {
-  if (analogRead(JoyAxis1) > maxResistance) {
+  if (getTime() != mainMenuTime) updateMainClock();
+  
+  if (goRight()) {
     int prevApp = currentChosenApp;
     currentChosenApp++;
-    if (currentChosenApp > 105) currentChosenApp = 101;
+    if (currentChosenApp > appsAmount + 100) currentChosenApp = 101;
     drawApps(currentChosenApp, prevApp, false);
-  delay(200);
+    delay(200);
   }
-  else if (analogRead(JoyAxis1) < minResistance) {
+  else if (goLeft()) {
     int prevApp = currentChosenApp;
     currentChosenApp--;
-    if (currentChosenApp < 101) currentChosenApp = appsAmount + 105;
+    if (currentChosenApp < 101) currentChosenApp = appsAmount + 100;
     drawApps(currentChosenApp, prevApp, false);
-  delay(200);
+    delay(200);
   }
-  else if (digitalRead(JoyBut0) == LOW) {
+  else if (goDown()) {
+    int prevApp = currentChosenApp;
+    currentChosenApp+=2;
+    if (currentChosenApp > appsAmount + 101) currentChosenApp = 102;
+    if (currentChosenApp > appsAmount + 100) currentChosenApp = 101;
+    drawApps(currentChosenApp, prevApp, false);
+    delay(200);
+  }
+  else if (goUp()) {
+    int prevApp = currentChosenApp;
+    currentChosenApp-=2;
+    if (currentChosenApp < 100) currentChosenApp = appsAmount + 99;
+    if (currentChosenApp < 101) currentChosenApp = appsAmount + 100;
+    drawApps(currentChosenApp, prevApp, false);
+    delay(200);
+  }
+  else if (goButton()) {
     if (currentChosenApp < appsAmount + 101){
       appID = currentChosenApp - 100;
       defines();
@@ -404,15 +557,23 @@ void loop_main() {
 }
 
 void loop_calc() {
-  if (analogRead(JoyAxis1) < minResistance) {
+  if (goLeft()) {
     button0pressAction();
     delay(200);
   }
-  else if (analogRead(JoyAxis1) > maxResistance) {
+  else if (goRight()) {
     button1pressAction();
     delay(200);
   }
-  else if (digitalRead(JoyBut0) == LOW) {
+  else if (goUp()) {
+    button0pressActionB();
+    delay(200);
+  }
+  else if (goDown()) {
+    button1pressActionB();
+    delay(200);
+  }
+  else if (goButton()) {
     button2pressAction();
     delay(200);
   }
@@ -420,66 +581,88 @@ void loop_calc() {
 
 void loop_calendar() {
   // Left arrow, go backwards
-  if (analogRead(JoyAxis1) < minResistance) {
+  if (goUp()) {
     if (yearMode){
-      if (currentYear > 1970){
-        currentYear--;
+      if (calendarYear > 1970){
+        calendarYear--;
       }else{
-        currentYear = 2037;
+        calendarYear = 2037;
       }
     }
     else{
-      if (currentMonth == 0) {
-        currentMonth = numMonths - 1;
+      if (calendarMonth == 0) {
+        calendarMonth = numMonths - 1;
       } else {
-        currentMonth--;
+        calendarMonth--;
       }
-      if (currentMonth == 11) {
-        currentYear--;
+      if (calendarMonth == 11) {
+        calendarYear--;
       }
     }
-    
-    drawCalendar(currentYear, currentMonth);
+    getRTCCalendarData();
+    drawCalendar(calendarYear, calendarMonth);
     delay(50);
   }
 
   // Right arrow, go forwards
-  if (analogRead(JoyAxis1) > maxResistance) {
+  if (goDown()) {
     if (yearMode){
-      if (currentYear < 2037){
-        currentYear++;
+      if (calendarYear < 2037){
+        calendarYear++;
       }else{
-        currentYear = 1970;
+        calendarYear = 1970;
       }
     }
     else{
-      currentMonth = (currentMonth + 1) % numMonths;
-      if (currentMonth == 0) {
-        currentYear++;
+      calendarMonth = (calendarMonth + 1) % numMonths;
+      if (calendarMonth == 0) {
+        calendarYear++;
       }
     }
-      drawCalendar(currentYear, currentMonth);
-      delay(50);
+	getRTCCalendarData();
+    drawCalendar(calendarYear, calendarMonth);
+    delay(50);
   }
   
-  //Enter button, change between year and month controller
-  if (digitalRead(JoyBut0) == LOW) {
-    yearMode = !yearMode;
+  //Switch controller to year/month
+  if (goLeft() && yearMode) {
+    yearMode = false;
     printCalendarLabel(100); //yOffset
     delay(200);
+  }
+  
+  if (goRight() && !yearMode) {
+    yearMode = true;
+    printCalendarLabel(100); //yOffset
+    delay(200);
+  }
+  
+  //Enter button - Go back to RTC-date
+  if (goButton()){
+	getRTCCalendarData();
+	drawCalendar(currentYear, currentMonth);
+	delay(50);
   }
 }
 
 void loop_notepad() {
-  if (analogRead(JoyAxis1) < minResistance) {
+  if (goLeft()) {
     KeyPress0();
-    delay(200);
+    delay(300);
   }
-  if (analogRead(JoyAxis1) > maxResistance) {
+  else if (goRight()) {
     KeyPress1();
-    delay(200);
+    delay(300);
   }
-  else if (digitalRead(JoyBut0) == LOW) {
+  else if (goUp()) {
+    KeyPress0b();
+    delay(300);
+  }
+  else if (goDown()) {
+    KeyPress1b();
+    delay(300);
+  }
+  else if (goButton()) {
     KeyPress2();
     delay(200);
   }
@@ -489,11 +672,11 @@ void loop_stopwatch() {
   unsigned long currentTimeMillis = millis();
   unsigned long elapsedSeconds = (currentTimeMillis / 1000) - stopwatchTimeStamp;
 
-  if ((analogRead(JoyAxis1) < minResistance || analogRead(JoyAxis1) > maxResistance) && running) {
+  if ((goLeft() || goRight() || goUp() || goDown()) && running) {
     stopwatchButton = (stopwatchButton + 1) % 2; // Both buttons switch to the opposite function (Pause/Resume, Start/Stop)
     displayStatusMessage();
-    delay(100);
-  } else if (digitalRead(JoyBut0) == LOW) {
+    delay(300);
+  } else if (goButton()) {
     if (!running || stopwatchButton == 0) {
       // Start or Stop
       running = !running;
@@ -540,18 +723,29 @@ void loop_stopwatch() {
 }
 
 void loop_tictactoe(){
-  if (analogRead(JoyAxis1) < minResistance) {
-    GoLeft();
-    delay(200);
+  if (goLeft()) {
+    TicTacLeft();
+    delay(300);
   }
-  if (analogRead(JoyAxis1) > maxResistance) {
-    GoRight();
-    delay(200);
+  if (goRight()) {
+    TicTacRight();
+    delay(300);
   }
-  else if (digitalRead(JoyBut0) == LOW) {
+  if (goUp()) {
+    TicTacUp();
+    delay(300);
+  }
+  if (goDown()) {
+    TicTacDown();
+    delay(300);
+  }
+  else if (goButton()) {
     TicTacEnter();
     delay(200);
   }
+}
+
+void loop_paint(){
 }
 
 // Start Calculator Code
@@ -667,15 +861,22 @@ void equalFunc() {
 void drawCalculatorInterface() {
   tft.setTextSize(2);
   tft.setTextColor(ILI9341_WHITE);
-  updateCalculatorButton(-2, -2, true);
+  updateCalculatorButton(-2, -2, true, false);
 }
 
-void updateCalculatorButton(int8_t current, int8_t previous, bool all){
+void updateCalculatorButton(int8_t current, int8_t previous, bool all, bool alt){
   // If it doesn't update all, It updates only the current and the previous selected buttons
-  if (current == 0 || previous == 0 || previous == 16 || all) drawButton("1", 10+spacing, 120, highlightID == 0);
-  if (current == 1 || previous == 1 || all) drawButton("2", 10+spacing + buttonWidth + spacing, 120, highlightID == 1);
-  if (current == 2 || previous == 2 || all) drawButton("3", 10+spacing + 2 * (buttonWidth + spacing), 120, highlightID == 2);
-  if (current == 3 || previous == 3 || all) drawButton("+", 10+spacing + 3 * (buttonWidth + spacing), 120, highlightID == 3);
+  if (alt){ //Up-down alternative reloading
+    if (current == 0 || previous == 0 || previous == 16) drawButton("1", 10+spacing, 120, highlightID == 0);
+    if (current == 1 || previous == 1 || previous == 17) drawButton("2", 10+spacing + buttonWidth + spacing, 120, highlightID == 1);
+    if (current == 2 || previous == 2 || previous == 18) drawButton("3", 10+spacing + 2 * (buttonWidth + spacing), 120, highlightID == 2);
+    if (current == 3 || previous == 3 || previous == 19) drawButton("+", 10+spacing + 3 * (buttonWidth + spacing), 120, highlightID == 3);
+  }else{
+    if (current == 0 || previous == 0 || previous == 16 || all) drawButton("1", 10+spacing, 120, highlightID == 0);
+    if (current == 1 || previous == 1 || all) drawButton("2", 10+spacing + buttonWidth + spacing, 120, highlightID == 1);
+    if (current == 2 || previous == 2 || all) drawButton("3", 10+spacing + 2 * (buttonWidth + spacing), 120, highlightID == 2);
+    if (current == 3 || previous == 3 || all) drawButton("+", 10+spacing + 3 * (buttonWidth + spacing), 120, highlightID == 3);
+  }
 
   if (current == 4 || previous == 4 || all) drawButton("4", 10+spacing, 120 + buttonHeight + spacing, highlightID == 4);
   if (current == 5 || previous == 5 || all) drawButton("5", 10+spacing + buttonWidth + spacing, 120 + buttonHeight + spacing, highlightID == 5);
@@ -687,10 +888,18 @@ void updateCalculatorButton(int8_t current, int8_t previous, bool all){
   if (current == 10 || previous == 10 || all) drawButton("9", 10+spacing + 2 * (buttonWidth + spacing), 120 + 2 * (buttonHeight + spacing), highlightID == 10);
   if (current == 11 || previous == 11 || all) drawButton("*", 10+spacing + 3 * (buttonWidth + spacing), 120 + 2 * (buttonHeight + spacing), highlightID == 11);
 
-  if (current == 12 || previous == 12 || all) drawButton("C", 10+spacing, 120 + 3 * (buttonHeight + spacing), highlightID == 12);
-  if (current == 13 || previous == 13 || all) drawButton("0", 10+spacing + buttonWidth + spacing, 120 + 3 * (buttonHeight + spacing), highlightID == 13);
-  if (current == 14 || previous == 14 || all) drawButton("=", 10+spacing + 2 * (buttonWidth + spacing), 120 + 3 * (buttonHeight + spacing), highlightID == 14);
-  if (current == 15 || previous == 15 || previous == -1 || all) drawButton("/", 10+spacing + 3 * (buttonWidth + spacing), 120 + 3 * (buttonHeight + spacing), highlightID == 15);
+  if (alt){ //Up-down alternative reloading
+    if (current == 12 || previous == 12 || previous == -4) drawButton("C", 10+spacing, 120 + 3 * (buttonHeight + spacing), highlightID == 12);
+    if (current == 13 || previous == 13 || previous == -3) drawButton("0", 10+spacing + buttonWidth + spacing, 120 + 3 * (buttonHeight + spacing), highlightID == 13);
+    if (current == 14 || previous == 14 || previous == -2) drawButton("=", 10+spacing + 2 * (buttonWidth + spacing), 120 + 3 * (buttonHeight + spacing), highlightID == 14);
+    if (current == 15 || previous == 15 || previous == -1) drawButton("/", 10+spacing + 3 * (buttonWidth + spacing), 120 + 3 * (buttonHeight + spacing), highlightID == 15);
+  }
+  else{
+    if (current == 12 || previous == 12 || all) drawButton("C", 10+spacing, 120 + 3 * (buttonHeight + spacing), highlightID == 12);
+    if (current == 13 || previous == 13 || all) drawButton("0", 10+spacing + buttonWidth + spacing, 120 + 3 * (buttonHeight + spacing), highlightID == 13);
+    if (current == 14 || previous == 14 || all) drawButton("=", 10+spacing + 2 * (buttonWidth + spacing), 120 + 3 * (buttonHeight + spacing), highlightID == 14);
+    if (current == 15 || previous == 15 || previous == -1 || all) drawButton("/", 10+spacing + 3 * (buttonWidth + spacing), 120 + 3 * (buttonHeight + spacing), highlightID == 15);
+  }
   // special cases -1 and 16, because it goes off bounds otherwise
 }
 
@@ -717,7 +926,7 @@ void button0pressAction(){
   if (highlightID < 0){
     highlightID = 15;
   }
-  updateCalculatorButton(highlightID, highlightID + 1, false);
+  updateCalculatorButton(highlightID, highlightID + 1, false, false);
 }
 
 void button1pressAction(){
@@ -729,7 +938,33 @@ void button1pressAction(){
   if (highlightID > 15){
     highlightID = 0;
   }
-  updateCalculatorButton(highlightID, highlightID - 1, false);
+  updateCalculatorButton(highlightID, highlightID - 1, false, false);
+}
+
+void button0pressActionB(){
+  if (shouldReset){
+    resetCalc();
+  }
+  
+  highlightID-=4;
+  if (highlightID < -3) highlightID = 12;
+  if (highlightID < -2) highlightID = 13;
+  if (highlightID < -1) highlightID = 14;
+  if (highlightID < 0) highlightID = 15;
+  updateCalculatorButton(highlightID, highlightID + 4, false, true);
+}
+
+void button1pressActionB(){
+  if (shouldReset){
+    resetCalc();
+  }
+  
+  highlightID+=4;
+  if (highlightID > 18) highlightID = 3;
+  if (highlightID > 17) highlightID = 2;
+  if (highlightID > 16) highlightID = 1;
+  if (highlightID > 15) highlightID = 0;
+  updateCalculatorButton(highlightID, highlightID - 4, false, true);
 }
 
 void button2pressAction(){
@@ -794,7 +1029,29 @@ void button2pressAction(){
 
 // Start Calendar Code
 
+void getRTCCalendarData(){
+  RTCKeepAliveCheck();
+  // Get current date and time from the RTC
+  if (RTCFailure){
+	  currentDay = 0;
+	  currentMonth = 0;
+	  currentYear = 2023;
+  }else{
+    RtcDateTime now = Rtc.GetDateTime();
+    currentDay = now.Day();
+    currentYear = now.Year();
+    currentMonth = now.Month();
+	
+	if (now.Hour() == 23 && now.Minute() == 59) currentDay++; //Fix for day updating at 12:01 AM
+	
+    currentMonth--;
+    // Done? Now continue loading...
+  }
+}
+
 void drawCalendar(int year, uint8_t monthIndex) {
+  calendarYear = year;
+  calendarMonth = monthIndex;
   
   tft.fillScreen(ILI9341_BLACK);
   tft.setTextColor(ILI9341_WHITE);
@@ -844,6 +1101,7 @@ void drawCalendar(int year, uint8_t monthIndex) {
     tft.setCursor(textX, textY);
     tft.setTextColor(ILI9341_WHITE);
     if (((day - 1 + startingDay) % 7) >= 5) tft.setTextColor(0xFACA); // Saturday and Sunday are RED
+	if (day == currentDay && monthIndex == currentMonth && year == currentYear) tft.setTextColor(ILI9341_GREEN);
     tft.print(day);
   }
 }
@@ -854,7 +1112,7 @@ void printCalendarLabel(uint8_t yOffset){
   tft.setCursor(60, yOffset - 80);
   
   int posX = 55; // The same as the month label
-  int monthGridSpaces = String(monthNames[currentMonth]).length();
+  int monthGridSpaces = String(monthNames[calendarMonth]).length();
   int textWidth = monthGridSpaces * 11; // Each letter in this context takes 11 units
   if (yearMode){
     textWidth = 48; // Only cover the year
@@ -865,11 +1123,11 @@ void printCalendarLabel(uint8_t yOffset){
   
   //Show month and year on top
   if (!yearMode) tft.setTextColor(ILI9341_BLACK);
-  tft.print(monthNames[currentMonth]);
+  tft.print(monthNames[calendarMonth]);
   tft.print(" ");
   if (yearMode) tft.setTextColor(ILI9341_BLACK);
   else tft.setTextColor(ILI9341_YELLOW);
-  tft.print(currentYear);
+  tft.print(calendarYear);
 }
 
 int dayOfWeek(int year, uint8_t month, uint8_t day) {
@@ -958,6 +1216,55 @@ void KeyPress1(){
   }
   drawKeyboard(currentKey, currentKey - 1, false);
 }
+
+void KeyPress0b(){
+  int8_t prevKey = currentKey;
+  
+  if (currentKey <= 1) currentKey = 29;
+  else if (currentKey <= 3) currentKey = 30;
+  else if (currentKey <= 5) currentKey = 31;
+  else if (currentKey <= 7) currentKey = 32;
+  else if (currentKey <= 9) currentKey = 33;
+  else if (currentKey <= 18) currentKey -= 10;
+  else if (currentKey <= 25) currentKey -= 8;
+  else if (currentKey == 26) currentKey = 19;
+  else if (currentKey == 27) currentKey = 22;
+  else if (currentKey == 28) currentKey = 25;
+  else if (currentKey == 29) currentKey = 26;
+  else if (currentKey <= 32) currentKey = 27;
+  else if (currentKey == 33) currentKey = 28;
+  
+  drawKeyboard(currentKey, prevKey, false);
+}
+
+void KeyPress1b(){
+  int8_t prevKey = currentKey;
+  
+  if (currentKey == 33) currentKey = 8;
+  else if (currentKey == 32) currentKey = 6;
+  else if (currentKey == 31) currentKey = 4;
+  else if (currentKey == 30) currentKey = 2;
+  else if (currentKey == 29) currentKey = 0;
+  else if (currentKey == 28) currentKey = 33;
+  else if (currentKey == 27) currentKey = 31;
+  else if (currentKey == 26) currentKey = 29;
+  else if (currentKey == 25) currentKey = 28;
+  else if (currentKey >= 20) currentKey = 27;
+  else if (currentKey == 19) currentKey = 26;
+  else if (currentKey == 18) currentKey = 25;
+  else if (currentKey >= 11) currentKey += 8;
+  else if (currentKey == 10) currentKey = 19;
+  else if (currentKey == 9) currentKey = 18;
+  else if (currentKey >= 0) currentKey += 10;
+  
+  drawKeyboard(currentKey, prevKey, false);
+}
+
+// r y g b w //29-33
+//qwertyuiop //0-9
+//asdfghjkl //10-18
+// zxcvbnm //19-25
+//del --- mode //26, 27, 28
 
 void KeyPress2() {
   if (currentKey < 26 && TheTextbox.length() < notepadSize){
@@ -1322,7 +1629,7 @@ void drawCursor(int8_t current, int8_t previous) {
   tft.drawRect(cursorX1, cursorY1, cursorSize, cursorSize, ILI9341_BLACK);
 }
 
-void GoLeft(){
+void TicTacLeft(){
   if (showWinner){
     resetTicTacToe();
     return;
@@ -1334,7 +1641,7 @@ void GoLeft(){
   drawCursor(currentCursor, prevCursor);
 }
 
-void GoRight(){
+void TicTacRight(){
   if (showWinner){
     resetTicTacToe();
     return;
@@ -1342,6 +1649,34 @@ void GoRight(){
   
   int prevCursor = currentCursor;
   currentCursor++;
+  if (currentCursor > 8) currentCursor = 0;
+  drawCursor(currentCursor, prevCursor);
+}
+
+void TicTacUp(){
+  if (showWinner){
+    resetTicTacToe();
+    return;
+  }
+  
+  int prevCursor = currentCursor;
+  currentCursor-=3;
+  if (currentCursor < -2) currentCursor = 6;
+  if (currentCursor < -1) currentCursor = 7;
+  if (currentCursor < 0) currentCursor = 8;
+  drawCursor(currentCursor, prevCursor);
+}
+
+void TicTacDown(){
+  if (showWinner){
+    resetTicTacToe();
+    return;
+  }
+  
+  int prevCursor = currentCursor;
+  currentCursor+=3;
+  if (currentCursor > 10) currentCursor = 2;
+  if (currentCursor > 9) currentCursor = 1;
   if (currentCursor > 8) currentCursor = 0;
   drawCursor(currentCursor, prevCursor);
 }
@@ -1420,3 +1755,46 @@ void resetTicTacToe(){
 }
 
 // End Tic Tac Toe Code
+
+// Start Paint Code
+
+void startPaintApp(){
+  if (showGrid) {
+    drawGrid();
+  }
+  drawSliders();
+  
+  // Draw brush color
+  tft.fillRect(200, 10, 30, 30, brushColor);
+}
+
+void drawGrid() {
+  // Draw vertical lines
+  for (int i = 0; i < 32; i++) {
+    int x = i * (tft.width() / 32);
+    tft.drawFastVLine(x, 0, tft.height(), ILI9341_BLACK);
+  }
+
+  // Draw horizontal lines
+  for (int i = 0; i < 32; i++) {
+    int y = i * (tft.height() / 32);
+    tft.drawFastHLine(0, y, tft.width(), ILI9341_BLACK);
+  }
+}
+
+void drawSliders() {
+  // Draw R slider
+  tft.fillRect(10, 200, 200, 10, ILI9341_BLACK);
+  int rSliderPos = map(rSlider, 0, 255, 0, 200);
+  tft.fillRect(10, 200, rSliderPos, 10, ILI9341_RED);
+
+  // Draw G slider
+  tft.fillRect(10, 220, 200, 10, ILI9341_BLACK);
+  int gSliderPos = map(gSlider, 0, 255, 0, 200);
+  tft.fillRect(10, 220, gSliderPos, 10, ILI9341_GREEN);
+
+  // Draw B slider
+  tft.fillRect(10, 240, 200, 10, ILI9341_BLACK);
+  int bSliderPos = map(bSlider, 0, 255, 0, 200);
+  tft.fillRect(10, 240, bSliderPos, 10, ILI9341_BLUE);
+}
