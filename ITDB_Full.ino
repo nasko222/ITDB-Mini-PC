@@ -201,17 +201,35 @@ char winnerChar;
 // Start Defines Paint
 
 bool showGrid = true;
-uint16_t brushColor = 0xFFFF; // Initial color is white
+
+const int negativeYOffset = 5;
+const int colorSlideDelay = 10;
+
+uint8_t imageRes = 16;
+
+uint16_t imageData[1024];
+
 // Slider values
+int8_t slider = 0; // 0 - red, 1 - green, 2 - blue
 uint8_t rSlider = 127;
 uint8_t gSlider = 127;
 uint8_t bSlider = 127;
+
+// Grid Cursor
+int8_t cursorX;// = 15;
+int8_t cursorY;// = 31;
+
+uint8_t sliderMode = 0;
+bool paintBTNRide = false;
+
+// Current Brush
+uint16_t getPaintBrush() {return tft.color565(rSlider, gSlider, bSlider);}
 
 // End Defines Paint
 
 // RTC Clock
 
-ThreeWire myWire(6,7,5); // IO, SCLK, CE
+ThreeWire myWire(6,7,5); // DAT, CLK, RST
 RtcDS1302<ThreeWire> Rtc(myWire);
 bool RTCFailure;
 
@@ -233,7 +251,25 @@ void setup(){
   tft.begin();
   appID = 0; // Get main menu
   defines();
+  //generateRandomColors();
 }
+
+/*
+
+Debug stuff random colors for testing cursor
+
+
+void generateRandomColors() {
+  for (int i = 0; i < imageWidth * imageHeight; i++) {
+    for (int j = 0; j < 3; j++) {
+      imageData[i][j] = random(256);
+    }
+  }
+}
+
+uint16_t getRandomColor() {
+  return tft.color565(random(0, 256), random(0, 256), random(0, 256));
+}*/
 
 void RTCKeepAliveCheck(){
   RtcDateTime now = Rtc.GetDateTime();
@@ -292,6 +328,9 @@ void defines(){
   gameTie = false;
   showWinner = false;
   winnerChar = ' ';
+  
+  //Paint
+  //(none)
   
   //RTC Keep Alive
   RTCKeepAliveCheck();
@@ -355,10 +394,6 @@ String getTime() {
   int hours = now.Hour();
   int minutes = now.Minute();
   //int seconds = now.Second();
-  
-  //calibrate
-  minutes++;
-  //end calibrate
 
   // Convert to 12-hour format
   bool isPM = false;
@@ -746,6 +781,62 @@ void loop_tictactoe(){
 }
 
 void loop_paint(){
+  if (sliderMode == 1){
+      if (goLeft()){
+        moveCursor(-1, 0);
+        delay(150);
+      }
+      if (goRight()){
+        moveCursor(1, 0);
+        delay(150);
+      }
+      if (goUp()) {
+        moveCursor(0, -1);
+        delay(150);
+      }
+      if (goDown()) {
+        moveCursor(0, 1);
+        delay(150);
+      }
+
+      if (goButton()) addPaintColor();
+
+      return;
+  }
+  if (goLeft()){
+    backwardSlider();
+  }
+  else if (goRight()){
+    forwardSlider();
+  }
+  else if (goUp()) {
+    if (slider > -2){
+      slider--;
+	  updateSliderIndicator();
+    if (slider == -2){
+      sliderMode = 1;
+      
+      cursorX = imageRes == 32 ?15:7;
+      cursorY = imageRes == 32 ?31:15;
+
+      drawCursor();
+    }
+    delay(300);
+	}
+  }
+  else if (goDown()) {
+    if (slider < 2){
+      slider++;
+    updateSliderIndicator();
+    
+    delay(300);
+	}
+  }
+  
+  else if (goButton()){
+    paintBTNManager();
+	  delay(200);
+  }
 }
 
 // Start Calculator Code
@@ -1759,42 +1850,330 @@ void resetTicTacToe(){
 // Start Paint Code
 
 void startPaintApp(){
-  if (showGrid) {
-    drawGrid();
-  }
+  //Draw main outline
+  if (imageRes == 32) tft.drawRect(21, 1, 194, 194, ILI9341_WHITE);
+  else tft.drawRect(19, 7, 194, 194, ILI9341_WHITE);
+
   drawSliders();
+  gridBTN(true);
   
+  tft.setCursor(120, 205);
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+  tft.print("Color:");
+  
+  updateColor();
+  updateSliderIndicator();
+}
+
+void updateColor(){
   // Draw brush color
-  tft.fillRect(200, 10, 30, 30, brushColor);
+  tft.drawRect(199, 204, 17, 17, ILI9341_WHITE);
+  tft.fillRect(200, 205, 15, 15, getPaintBrush());
+}
+
+void paintBTNManager(){
+  if (slider == -1){
+    // In range
+    if (!paintBTNRide){
+      // Grid toggle
+      showGrid = !showGrid;
+      gridBTN(true);
+    }else{
+      // Are you sure you wanna delete?
+      imageRes = imageRes == 16 ? 32 : 16;
+
+      clearImageMemory();
+      defines(); // Calls outside of memory bounds
+    }
+  }
+}
+
+void gridBTN(bool updateGrid){
+  tft.fillRect(10, 205, 95, 15, ILI9341_BLACK);
+  
+  tft.setCursor(10, 205);
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+  tft.print(paintBTNRide ? "Res:" : "Grid:");
+  
+  tft.setCursor(70, 205);
+  tft.setTextSize(2);
+  if (paintBTNRide){
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.print(imageRes == 16 ? "16x" : "32x");
+  }
+  else if (showGrid){
+    tft.setTextColor(ILI9341_GREEN);
+    tft.print("ON");
+  }else{
+    tft.setTextColor(ILI9341_RED);
+    tft.print("OFF");
+  }
+
+  if (updateGrid) drawGrid();
 }
 
 void drawGrid() {
+  int xAdjust = imageRes == 32 ? 16 : 8;
+  int margin = imageRes == 32 ? 6 : 12;
+
+  drawImage();
+
+  if (!showGrid) return;
+  
   // Draw vertical lines
-  for (int i = 0; i < 32; i++) {
-    int x = i * (tft.width() / 32);
-    tft.drawFastVLine(x, 0, tft.height(), ILI9341_BLACK);
+  for (int i = 0; i <= imageRes; i++) {
+    int x = (i + 1) * margin;
+   // if (!showGrid && i != 0 && i != imageRes) continue;
+    tft.drawFastVLine(x + xAdjust, margin - negativeYOffset, 192, ILI9341_WHITE);
   }
 
   // Draw horizontal lines
-  for (int i = 0; i < 32; i++) {
-    int y = i * (tft.height() / 32);
-    tft.drawFastHLine(0, y, tft.width(), ILI9341_BLACK);
+  for (int i = 0; i <= imageRes; i++) {
+    int y = (i + 1) * margin;
+   // if (!showGrid && i != 0 && i != imageRes) continue;
+    tft.drawFastHLine(margin + xAdjust, y - negativeYOffset, 192, ILI9341_WHITE);
   }
 }
 
 void drawSliders() {
-  // Draw R slider
-  tft.fillRect(10, 200, 200, 10, ILI9341_BLACK);
-  int rSliderPos = map(rSlider, 0, 255, 0, 200);
-  tft.fillRect(10, 200, rSliderPos, 10, ILI9341_RED);
+  int xAdjust = 8;
+  
+  tft.drawRect(xAdjust + 9, 229, xAdjust + 202, 22, ILI9341_WHITE);
+  int rSliderPos = map(rSlider, 0, 255, -8, 200);
+  tft.fillRect(xAdjust + 10, 230, xAdjust + rSliderPos, 20, ILI9341_RED);
 
   // Draw G slider
-  tft.fillRect(10, 220, 200, 10, ILI9341_BLACK);
-  int gSliderPos = map(gSlider, 0, 255, 0, 200);
-  tft.fillRect(10, 220, gSliderPos, 10, ILI9341_GREEN);
+  tft.drawRect(xAdjust + 9, 259, xAdjust + 202, 22, ILI9341_WHITE);
+  int gSliderPos = map(gSlider, 0, 255, -8, 200);
+  tft.fillRect(xAdjust + 10, 260, xAdjust + gSliderPos, 20, ILI9341_GREEN);
 
   // Draw B slider
-  tft.fillRect(10, 240, 200, 10, ILI9341_BLACK);
-  int bSliderPos = map(bSlider, 0, 255, 0, 200);
-  tft.fillRect(10, 240, bSliderPos, 10, ILI9341_BLUE);
+  tft.drawRect(xAdjust + 9, 289, xAdjust + 202, 22, ILI9341_WHITE);
+  int bSliderPos = map(bSlider, 0, 255, -8, 200);
+  tft.fillRect(xAdjust + 10, 290, xAdjust + bSliderPos, 20, ILI9341_BLUE);
 }
+
+void backwardSlider(){
+  if (slider == 0 && rSlider > 0){
+    rSlider--;
+    updateRedSlider(false);
+    delay(colorSlideDelay);
+  }
+  if (slider == 1 && gSlider > 0){
+    gSlider--;
+    updateGreenSlider(false);
+    delay(colorSlideDelay);
+  }
+  if (slider == 2 && bSlider > 0){
+    bSlider--;
+    updateBlueSlider(false);
+    delay(colorSlideDelay);
+  }
+
+  if (slider == -1){
+    paintBTNRide = !paintBTNRide;
+    gridBTN(false);
+    delay(250);
+  }
+}
+
+void forwardSlider(){
+  if (slider == 0 && rSlider < 255){
+    rSlider++;
+    updateRedSlider(true);
+    delay(colorSlideDelay);
+  }
+  if (slider == 1 && gSlider < 255){
+    gSlider++;
+    updateGreenSlider(true);
+    delay(colorSlideDelay);
+  }
+  if (slider == 2 && bSlider < 255){
+    bSlider++;
+    updateBlueSlider(true);
+    delay(colorSlideDelay);
+  }
+
+  if (slider == -1){
+    paintBTNRide = !paintBTNRide;
+    gridBTN(false);
+    delay(250);
+  }
+}
+
+void updateRedSlider(bool forward) {
+  int xAdjust = 8;
+  if (!forward){
+    // Calculate the previous and new positions of the slider
+    int prevPos = map(rSlider + 1, 0, 255, -8, 200);
+    int newPos = map(rSlider, 0, 255, -8, 200);
+	
+	tft.fillRect(xAdjust + 18 + newPos, 230, xAdjust + prevPos - newPos, 20, ILI9341_BLACK);
+	
+	//Overlap fix
+	tft.drawFastVLine(xAdjust + xAdjust + 8 + 202, 229, 22, ILI9341_WHITE);
+  }else{
+    // Calculate the previous and new positions of the slider
+    int prevPos = map(rSlider + 1, 0, 255, -8, 200);
+    int newPos = map(rSlider, 0, 255, -8, 200);
+	
+	//Underlap fix
+	if (newPos < -1) newPos = -1;
+	
+	tft.fillRect(xAdjust + 10 + newPos, 230, xAdjust + prevPos - newPos, 20, ILI9341_RED);
+	
+	//Underlap fix end
+	tft.drawFastVLine(xAdjust + 9, 229, 22, ILI9341_WHITE);
+  }
+  updateColor();
+}
+
+void updateGreenSlider(bool forward) {
+  int xAdjust = 8;
+  if (!forward){
+    // Calculate the previous and new positions of the slider
+    int prevPos = map(gSlider + 1, 0, 255, -8, 200);
+    int newPos = map(gSlider, 0, 255, -8, 200);
+	
+	tft.fillRect(xAdjust + 18 + newPos, 260, xAdjust + prevPos - newPos, 20, ILI9341_BLACK);
+	
+	//Overlap fix
+	tft.drawFastVLine(xAdjust + xAdjust + 8 + 202, 259, 22, ILI9341_WHITE);
+  }else{
+    // Calculate the previous and new positions of the slider
+    int prevPos = map(gSlider + 1, 0, 255, -8, 200);
+    int newPos = map(gSlider, 0, 255, -8, 200);
+	
+	//Underlap fix
+	if (newPos < -1) newPos = -1;
+	
+	tft.fillRect(xAdjust + 10 + newPos, 260, xAdjust + prevPos - newPos, 20, ILI9341_GREEN);
+	
+	//Underlap fix end
+	tft.drawFastVLine(xAdjust + 9, 259, 22, ILI9341_WHITE);
+  }
+  updateColor();
+}
+
+void updateBlueSlider(bool forward) {
+  int xAdjust = 8;
+  if (!forward){
+    // Calculate the previous and new positions of the slider
+    int prevPos = map(bSlider + 1, 0, 255, -8, 200);
+    int newPos = map(bSlider, 0, 255, -8, 200);
+	
+	tft.fillRect(xAdjust + 18 + newPos, 290, xAdjust + prevPos - newPos, 20, ILI9341_BLACK);
+	
+	//Overlap fix
+	tft.drawFastVLine(xAdjust + xAdjust + 8 + 202, 289, 22, ILI9341_WHITE);
+  }else{
+    // Calculate the previous and new positions of the slider
+    int prevPos = map(bSlider + 1, 0, 255, -8, 200);
+    int newPos = map(bSlider, 0, 255, -8, 200);
+	
+	//Underlap fix
+	if (newPos < -1) newPos = -1;
+	
+	tft.fillRect(xAdjust + 10 + newPos, 290, xAdjust + prevPos - newPos, 20, ILI9341_BLUE);
+	
+	//Underlap fix end
+	tft.drawFastVLine(xAdjust + 9, 289, 22, ILI9341_WHITE);
+  }
+  updateColor();
+}
+
+void updateSliderIndicator(){
+  tft.fillCircle(5, 240, 3, ILI9341_BLACK);
+  tft.fillCircle(5, 270, 3, ILI9341_BLACK);
+  tft.fillCircle(5, 300, 3, ILI9341_BLACK);
+  if (slider == -2 || slider == 0) tft.drawRect(7, 202, 99, 21, ILI9341_BLACK);
+  else if (slider == -1) tft.drawRect(7, 202, 99, 21, ILI9341_WHITE);
+
+  if (slider == 0) tft.fillCircle(5, 240, 3, ILI9341_GREEN);
+  else if (slider == 1) tft.fillCircle(5, 270, 3, ILI9341_GREEN);
+  else if (slider == 2) tft.fillCircle(5, 300, 3, ILI9341_GREEN);
+}
+
+void moveCursor(int deltaX, int deltaY) {
+  if (cursorY == (imageRes - 1) && deltaY == 1){
+    clearCursor();
+
+    tft.drawRect(7, 202, 99, 21, ILI9341_WHITE);
+
+    sliderMode = 0;
+    slider = -1;
+
+    return;
+  }
+  int newCursorX = constrain(cursorX + deltaX, 0, imageRes - 1);
+  int newCursorY = constrain(cursorY + deltaY, 0, imageRes - 1);
+
+  clearCursor();
+
+  cursorX = newCursorX;
+  cursorY = newCursorY;
+
+  drawCursor();
+}
+
+void drawCursor() {
+  int xAdjust = imageRes == 32 ? 16 : 8;
+  int margin = imageRes == 32 ? 6 : 12;
+  int cursorXPos = (cursorX + 1) * margin + xAdjust;
+  int cursorYPos = (cursorY + 1) * margin;
+
+  if (!showGrid) tft.fillRect(cursorXPos, cursorYPos + 1 - negativeYOffset, margin, margin, imageData[cursorY * imageRes + cursorX]);
+  else tft.fillRect(cursorXPos + 1, cursorYPos + 1 - negativeYOffset, margin - 1, margin - 1, imageData[cursorY * imageRes + cursorX]);
+  
+  if (showGrid) tft.fillRect(cursorXPos + 2, cursorYPos + 2 - negativeYOffset, margin - 3, margin - 3, getPaintBrush());
+  else tft.fillRect(cursorXPos + 1, cursorYPos + 2 - negativeYOffset, margin - 2, margin - 2, getPaintBrush());
+}
+
+void clearCursor() {
+  int xAdjust = imageRes == 32 ? 16 : 8;
+  int margin = imageRes == 32 ? 6 : 12;
+  int cursorXPos = (cursorX + 1) * margin + xAdjust;
+  int cursorYPos = (cursorY + 1) * margin;
+
+  tft.fillRect(cursorXPos + 1, cursorYPos + 1 - negativeYOffset, margin - 1, margin - 1, imageData[cursorY * imageRes + cursorX]);
+}
+
+void drawImage() {
+  int xAdjust = imageRes == 32 ? 16 : 8;
+  int margin = imageRes == 32 ? 6 : 12;
+  int squareSize = imageRes == 32 ? 6 : 12;
+
+  int startX = imageRes == 32 ? 22 : 20;
+  int startY = imageRes == 32 ? 7 : 13;
+
+  for (int y = 0; y < imageRes; y++) {
+    for (int x = 0; x < imageRes; x++) {
+      int index = y * imageRes + x;
+      uint16_t pixelColor = imageData[index];
+
+      int xPos = x * margin + startX;
+      int yPos = y * margin + startY;
+
+      // Draw a filled rectangle for each pixel
+      tft.fillRect(xPos, yPos - negativeYOffset, squareSize, squareSize, pixelColor);
+    }
+  }
+}
+
+void addPaintColor(){
+  imageData[cursorY * imageRes + cursorX] = getPaintBrush();
+  drawCursor();
+}
+
+void clearImageMemory() {
+  for (int i = 0; i < 1024; i++) {
+    imageData[i] = 0;
+  }
+
+  // Reset screen all modes
+  tft.fillRect(18, 0, 198, 201, ILI9341_BLACK);
+}
+
+// End Paint Code
