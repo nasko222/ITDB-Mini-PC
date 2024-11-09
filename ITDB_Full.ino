@@ -1173,7 +1173,7 @@ void drawCalendar(int year, uint8_t monthIndex) {
   
   int daysInMonth = monthDays[monthIndex];
   if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)) { // Proper leap year check
-    daysInMonth++; // February has 29 days in a leap year
+    if (monthIndex == 1) daysInMonth++; // February has 29 days in a leap year
   }
   
   int startingDay = dayOfWeek(year, monthIndex + 1, 1);
